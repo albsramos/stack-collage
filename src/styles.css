@@ -189,6 +189,9 @@ button.wide { width: 100%; padding: 13px; }
 .row { display: flex; align-items: center; gap: 12px; }
 .row > label { width: 84px; flex: none; color: var(--muted); font-size: 14px; }
 .row input[type='range'] { flex: 1; accent-color: var(--accent); }
+.row.end { justify-content: flex-end; }
+.row.end > label { width: auto; }
+.row.end .chips { flex: 0 1 auto; }
 .val { width: 28px; text-align: right; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .chips { display: flex; gap: 8px; overflow-x: auto; flex: 1; padding: 2px; scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }

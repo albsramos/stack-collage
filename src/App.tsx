@@ -270,7 +270,7 @@ export default function App() {
                 Add photos or videos
               </button>
             )}
-            <div className="row">
+            <div className="row end">
               <label>Size</label>
               <div className="chips">
                 <button className={scale === 1 ? 'chip on' : 'chip'} onClick={() => setScale(1)}>
@@ -282,7 +282,7 @@ export default function App() {
               </div>
             </div>
             {anyVideo && (
-              <div className="row">
+              <div className="row end">
                 <label>Sound</label>
                 <div className="chips">
                   <button className={resolvedAudio === null ? 'chip on' : 'chip'} onClick={() => setAudioFrom(null)}>
