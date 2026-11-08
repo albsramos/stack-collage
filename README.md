@@ -6,10 +6,9 @@ Everything runs on-device in the browser — nothing is uploaded.
 
 ## Flow
 
-1. Pick a template: 2 or 3 stacked.
-2. Pick the ratio: 9:16 or 3:4.
-3. Slots always fill the frame edge to edge. Tap a slot (or **Add photos or videos**) to fill it. Drag to reposition, pinch / scroll to zoom. Use ↑ ↓ to reorder.
-4. **Export** → **Save**. On iPhone this opens the share sheet, so you can pick *Save Image* / *Save Video*.
+1. On the start screen pick 2 or 3 stacked (top) and 9:16 or 3:4 (bottom), then **Start**.
+2. Slots always fill the frame edge to edge. Tap a slot (or **Add photos or videos**) to fill it. Drag to reposition, pinch / scroll to zoom. Use ↑ ↓ to reorder.
+3. **Export** → **Save**. On iPhone this opens the share sheet, so you can pick *Save Image* / *Save Video*.
 
 ## Export quality
 

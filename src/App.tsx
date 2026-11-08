@@ -16,16 +16,18 @@ import {
 import { loadMedia, releaseMedia, type Media } from './media';
 import { exportCollage, hasVideo, saveResult, type ExportResult, type SlotState } from './exporter';
 
-type Step = 'template' | 'format' | 'editor';
+type Step = 'start' | 'editor';
 
 const MAX_DURATION = 60;
 
 const emptySlots = (): SlotState[] => [0, 1, 2].map(() => ({ media: null, t: { ...IDENTITY } }));
 
 export default function App() {
-  const [step, setStep] = useState<Step>('template');
+  const [step, setStep] = useState<Step>('start');
   const [count, setCount] = useState<Count>(3);
   const [formatId, setFormatId] = useState<FormatId>('story');
+  const [pickCount, setPickCount] = useState<Count | null>(null);
+  const [pickFormat, setPickFormat] = useState<FormatId | null>(null);
   const [layout, setLayout] = useState<LayoutOpts>(defaultLayout(3, 'story'));
   const bg = '#000000'; // never visible: slots always fill the frame
   const [slots, setSlots] = useState<SlotState[]>(emptySlots);
@@ -109,20 +111,18 @@ export default function App() {
   };
 
   // ---------- flow ----------
-  const chooseTemplate = (c: Count) => {
-    setCount(c);
-    setStep('format');
-  };
-  const chooseFormat = (f: FormatId) => {
-    setFormatId(f);
-    setLayout(defaultLayout(count, f));
+  const start = () => {
+    if (!pickCount || !pickFormat) return;
+    setCount(pickCount);
+    setFormatId(pickFormat);
+    setLayout(defaultLayout(pickCount, pickFormat));
     setStep('editor');
   };
   const startOver = () => {
     slots.forEach((s) => releaseMedia(s.media));
     setSlots(emptySlots());
     setSelected(null);
-    setStep('template');
+    setStep('start');
   };
 
   const resolvedAudio = useMemo(() => {
@@ -170,33 +170,40 @@ export default function App() {
   };
 
   // ---------- screens ----------
-  if (step === 'template') {
+  if (step === 'start') {
     return (
       <div className="screen start">
-        <main className="options">
-          {([2, 3] as Count[]).map((c) => (
-            <button key={c} className="option" onClick={() => chooseTemplate(c)} aria-label={`${c} stacked`}>
-              <MiniLayout count={c} formatId="story" />
-            </button>
-          ))}
+        <main className="pick">
+          <div className="pick-row">
+            {([2, 3] as Count[]).map((c) => (
+              <button
+                key={c}
+                className={pickCount === c ? 'option on' : 'option'}
+                onClick={() => setPickCount(c)}
+                aria-label={`${c} stacked`}
+                aria-pressed={pickCount === c}
+              >
+                <MiniLayout count={c} formatId={pickFormat ?? 'story'} />
+              </button>
+            ))}
+          </div>
+          <div className="pick-row">
+            {(Object.keys(FORMATS) as FormatId[]).map((f) => (
+              <button
+                key={f}
+                className={pickFormat === f ? 'option on' : 'option'}
+                onClick={() => setPickFormat(f)}
+                aria-label={FORMATS[f].label}
+                aria-pressed={pickFormat === f}
+              >
+                <MiniLayout count={pickCount ?? (1 as Count)} formatId={f} />
+                <span className="option-label">{FORMATS[f].label}</span>
+              </button>
+            ))}
+          </div>
         </main>
-      </div>
-    );
-  }
-
-  if (step === 'format') {
-    return (
-      <div className="screen start">
-        <main className="options">
-          {(Object.keys(FORMATS) as FormatId[]).map((f) => (
-            <button key={f} className="option" onClick={() => chooseFormat(f)} aria-label={FORMATS[f].label}>
-              <MiniLayout count={count} formatId={f} />
-              <span className="option-label">{FORMATS[f].label}</span>
-            </button>
-          ))}
-        </main>
-        <button className="back-btn" onClick={() => setStep('template')}>
-          Back
+        <button className="start-btn" disabled={!pickCount || !pickFormat} onClick={start}>
+          Start
         </button>
       </div>
     );

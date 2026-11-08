@@ -35,23 +35,7 @@ button { font: inherit; color: inherit; }
   border: 0; border-radius: 8px; background: transparent; color: #a1a1aa; cursor: pointer;
 }
 .ghost:hover { background: #18181b; color: #fafafa; }
-.back-btn {
-  flex: none;
-  width: 100%;
-  max-width: 440px;
-  margin: 12px auto 0;
-  height: 48px;
-  border-radius: 12px;
-  border: 1px solid #27272a;
-  background: #09090b;
-  color: #fafafa;
-  font-size: 15px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.back-btn:hover, .back-btn:active { background: #18181b; }
-.options {
+.pick {
   flex: 1;
   min-height: 0;
   width: 100%;
@@ -61,6 +45,23 @@ button { font: inherit; color: inherit; }
   flex-direction: column;
   gap: 12px;
 }
+.pick-row { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.start-btn {
+  flex: none;
+  width: 100%;
+  max-width: 440px;
+  margin: 16px auto 0;
+  height: 52px;
+  border-radius: 12px;
+  border: 0;
+  background: var(--accent);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, opacity 0.15s;
+}
+.start-btn:disabled { background: #18181b; color: #52525b; cursor: default; opacity: 1; }
 .option {
   flex: 1;
   min-height: 0;
@@ -69,7 +70,8 @@ button { font: inherit; color: inherit; }
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 20px;
+  padding: 16px;
+  min-width: 0;
   background: #09090b;
   border: 1px solid #27272a;
   border-radius: 16px;
@@ -78,6 +80,9 @@ button { font: inherit; color: inherit; }
 }
 .option:hover { background: #111113; border-color: #3f3f46; }
 .option:active { transform: scale(0.985); }
+.option.on { border-color: var(--accent); background: #0d1526; }
+.option.on .tile { fill: #3f3f46; }
+.option.on .option-label { color: #fafafa; }
 .option:focus-visible { outline: 2px solid #52525b; outline-offset: 2px; }
 .mini-box { flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; }
 .mini { height: 100%; width: auto; max-width: 100%; display: block; }
