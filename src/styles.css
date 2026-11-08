@@ -35,6 +35,15 @@ button { font: inherit; color: inherit; }
   border: 0; border-radius: 8px; background: transparent; color: #a1a1aa; cursor: pointer;
 }
 .ghost:hover { background: #18181b; color: #fafafa; }
+.pick-title {
+  width: 100%;
+  max-width: 440px;
+  margin: 4px auto 16px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #fafafa;
+}
 .pick {
   flex: 1;
   min-height: 0;

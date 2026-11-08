@@ -173,6 +173,7 @@ export default function App() {
   if (step === 'start') {
     return (
       <div className="screen start">
+        <h1 className="pick-title">Pick your template</h1>
         <main className="pick">
           <div className="pick-row">
             {([2, 3] as Count[]).map((c) => (
@@ -184,6 +185,7 @@ export default function App() {
                 aria-pressed={pickCount === c}
               >
                 <MiniLayout count={c} formatId={pickFormat ?? 'story'} />
+                <span className="option-label">{c} cards</span>
               </button>
             ))}
           </div>
