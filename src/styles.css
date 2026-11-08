@@ -133,7 +133,7 @@ button.danger { color: var(--danger); }
 button.wide { width: 100%; padding: 13px; }
 
 /* ---------- stage ---------- */
-.editor { overflow: hidden; padding-top: max(16px, env(safe-area-inset-top)); }
+.editor { overflow: hidden; }
 .stage-wrap {
   flex: 1 1 auto;
   min-height: 0;
@@ -190,18 +190,8 @@ button.wide { width: 100%; padding: 13px; }
   max-height: 50%;
   overflow-y: auto;
   margin-bottom: calc(-1 * env(safe-area-inset-bottom));
-  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
 }
-.actions { display: flex; gap: 10px; padding: 4px 16px 0; }
-.actions .square, .actions .main {
-  height: 52px; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer;
-}
-.actions .square {
-  width: 52px; flex: none; display: inline-flex; align-items: center; justify-content: center;
-  background: #09090b; border: 1px solid var(--line); color: var(--text);
-}
-.actions .main { flex: 1; border: 0; background: var(--accent); color: #fff; }
-.actions .main:disabled { opacity: 0.5; }
 .tools { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
 .row { display: flex; align-items: center; gap: 12px; }
 .row > label { width: 84px; flex: none; color: var(--muted); font-size: 14px; }
