@@ -41,7 +41,7 @@ Code map:
 
 ## Deploy
 
-Pushing to `main` builds and deploys to GitHub Pages (`.github/workflows/deploy.yml`). On iPhone open the Pages URL in Safari → Share → **Add to Home Screen**.
+Pushing to `main` builds the app and publishes it to the `gh-pages` branch (`.github/workflows/deploy.yml`), served at https://albsramos.github.io/stack-collage/. On iPhone open the Pages URL in Safari → Share → **Add to Home Screen**.
 
 ## Requirements / limits
 
