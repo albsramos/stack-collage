@@ -4,12 +4,14 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 // BASE is set by the GitHub Pages workflow (e.g. "/stack-collage/"); "/" for local dev.
 const base = process.env.BASE ?? '/';
+// ARTIFACT=1 builds a copy for a claude.ai artifact: relative paths, no service worker (the sandbox blocks it).
+const artifact = !!process.env.ARTIFACT;
 
 export default defineConfig({
-  base,
+  base: artifact ? './' : base,
   plugins: [
     react(),
-    VitePWA({
+    !artifact && VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icons/apple-touch-icon.png'],
       manifest: {

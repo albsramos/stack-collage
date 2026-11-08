@@ -389,7 +389,7 @@ export default function App() {
             <p className="muted">
               {format.w * scale}×{format.h * scale} · {(result.blob.size / 1e6).toFixed(1)} MB
             </p>
-            <button className="primary wide" onClick={() => saveResult(result)}>
+            <button className="primary wide" onClick={() => saveResult(result).catch((e) => showToast((e as Error).message))}>
               Save
             </button>
             <button className="wide" onClick={closeResult}>

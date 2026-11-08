@@ -272,6 +272,20 @@ function trimAudio(b: AudioBuffer, seconds: number): AudioBuffer {
 
 /** Hand the file to the OS share sheet (→ “Save Image/Video” on iOS) or fall back to a download. */
 export async function saveResult(r: ExportResult): Promise<'shared' | 'downloaded' | 'cancelled'> {
+  // Hosted inside a claude.ai artifact: the sandbox blocks downloads/Web Share, so use its downloads capability.
+  const host = (window as unknown as { claude?: { use(n: string): Promise<any> } }).claude;
+  if (host) {
+    const dl = await host.use('downloads').catch(() => null);
+    if (dl) {
+      try {
+        await dl.save({ filename: r.filename, data: r.blob });
+        return 'downloaded';
+      } catch (e) {
+        if ((e as { code?: string }).code === 'declined') return 'cancelled';
+        throw new Error((e as { message?: string }).message ?? 'Save failed');
+      }
+    }
+  }
   const file = new File([r.blob], r.filename, { type: r.blob.type });
   const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
   if (nav.canShare?.({ files: [file] }) && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
