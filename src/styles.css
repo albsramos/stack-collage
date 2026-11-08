@@ -1,5 +1,5 @@
 :root {
-  --bg: #0b0b0c;
+  --bg: #09090b;
   --panel: #161618;
   --line: #2a2a2e;
   --text: #f4f4f5;
@@ -18,7 +18,10 @@ button { font: inherit; color: inherit; }
 .screen {
   /* position:fixed fills the whole screen in iOS standalone mode, where 100dvh comes up short */
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--app-h, 100%);
   display: flex;
   flex-direction: column;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
@@ -128,6 +131,7 @@ button.primary, .buttons button, .sheet button, .chip {
 }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button:disabled { opacity: 0.4; cursor: default; }
+button.primary:disabled { opacity: 1; background: #18181b; border-color: #18181b; color: #52525b; }
 button.danger { color: var(--danger); }
 button.wide { width: 100%; padding: 13px; }
 
