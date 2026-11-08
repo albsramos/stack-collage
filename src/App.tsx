@@ -187,9 +187,6 @@ export default function App() {
   if (step === 'format') {
     return (
       <div className="screen start">
-        <button className="ghost back" onClick={() => setStep('template')} aria-label="Back">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
-        </button>
         <main className="options">
           {(Object.keys(FORMATS) as FormatId[]).map((f) => (
             <button key={f} className="option" onClick={() => chooseFormat(f)} aria-label={FORMATS[f].label}>
@@ -198,6 +195,9 @@ export default function App() {
             </button>
           ))}
         </main>
+        <button className="back-btn" onClick={() => setStep('template')}>
+          Back
+        </button>
       </div>
     );
   }
