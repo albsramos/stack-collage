@@ -26,7 +26,6 @@ button { font: inherit; color: inherit; }
 
 /* ---------- start screens: two stacked cards, nothing else ---------- */
 .start {
-  position: relative;
   background: #09090b;
   padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
     max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
