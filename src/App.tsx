@@ -173,17 +173,12 @@ export default function App() {
   if (step === 'template') {
     return (
       <div className="screen start">
-        <div className="brand">Stack</div>
-        <main className="choose">
-          <p className="eyebrow">Layout</p>
-          <div className="options">
-            {([2, 3] as Count[]).map((c) => (
-              <button key={c} className="option" onClick={() => chooseTemplate(c)}>
-                <MiniLayout count={c} formatId="story" />
-                <span className="option-label">{c === 2 ? 'Two' : 'Three'}</span>
-              </button>
-            ))}
-          </div>
+        <main className="options">
+          {([2, 3] as Count[]).map((c) => (
+            <button key={c} className="option" onClick={() => chooseTemplate(c)} aria-label={`${c} stacked`}>
+              <MiniLayout count={c} formatId="story" />
+            </button>
+          ))}
         </main>
       </div>
     );
@@ -192,24 +187,16 @@ export default function App() {
   if (step === 'format') {
     return (
       <div className="screen start">
-        <div className="brand">
-          <button className="ghost" onClick={() => setStep('template')} aria-label="Back">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
-          </button>
-          Stack
-        </div>
-        <main className="choose">
-          <p className="eyebrow">Format</p>
-          <div className="options">
-            {(Object.keys(FORMATS) as FormatId[]).map((f) => (
-              <button key={f} className="option" onClick={() => chooseFormat(f)}>
-                <MiniLayout count={count} formatId={f} />
-                <span className="option-label">
-                  {FORMATS[f].label} <span className="option-sub">{FORMATS[f].sub}</span>
-                </span>
-              </button>
-            ))}
-          </div>
+        <button className="ghost back" onClick={() => setStep('template')} aria-label="Back">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+        </button>
+        <main className="options">
+          {(Object.keys(FORMATS) as FormatId[]).map((f) => (
+            <button key={f} className="option" onClick={() => chooseFormat(f)} aria-label={FORMATS[f].label}>
+              <MiniLayout count={count} formatId={f} />
+              <span className="option-label">{FORMATS[f].label}</span>
+            </button>
+          ))}
         </main>
       </div>
     );
