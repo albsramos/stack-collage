@@ -4,7 +4,7 @@
   --line: #2a2a2e;
   --text: #f4f4f5;
   --muted: #9a9aa2;
-  --accent: #ff7a45;
+  --accent: #2b7bff;
   --danger: #ff5a5f;
   color-scheme: dark;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif;
@@ -74,7 +74,7 @@ button.primary, .buttons button, .sheet button, .chip {
   cursor: pointer;
   white-space: nowrap;
 }
-button.primary { background: var(--accent); border-color: var(--accent); color: #111; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button:disabled { opacity: 0.4; cursor: default; }
 button.danger { color: var(--danger); }
 button.wide { width: 100%; padding: 13px; }
