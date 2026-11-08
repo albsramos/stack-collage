@@ -1,6 +1,6 @@
 // Geometry shared by the on-screen preview and the exporter, so what you see is exactly what you export.
 
-export type FormatId = 'story' | 'post45' | 'post34' | 'square';
+export type FormatId = 'story' | 'post';
 export type RatioId = 'fill' | '16:9' | '3:2' | '4:3' | '1:1' | '4:5';
 export type Count = 2 | 3;
 
@@ -12,10 +12,8 @@ export interface Format {
 }
 
 export const FORMATS: Record<FormatId, Format> = {
-  story: { label: 'Story', sub: '9:16 · 1080×1920', w: 1080, h: 1920 },
-  post45: { label: 'Post', sub: '4:5 · 1080×1350', w: 1080, h: 1350 },
-  post34: { label: 'Post', sub: '3:4 · 1080×1440', w: 1080, h: 1440 },
-  square: { label: 'Post', sub: '1:1 · 1080×1080', w: 1080, h: 1080 },
+  story: { label: 'Story', sub: '9:16', w: 1080, h: 1920 },
+  post: { label: 'Post', sub: '3:4', w: 1080, h: 1440 },
 };
 
 export const RATIOS: { id: RatioId; label: string; value: number | null }[] = [

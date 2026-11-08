@@ -17,7 +17,7 @@ export default defineConfig({
       manifest: {
         name: 'Stack — photo & video collages',
         short_name: 'Stack',
-        description: 'Stack 2 or 3 photos or videos into an Instagram story or post.',
+        description: 'Stack 2 or 3 photos or videos into a story or post.',
         theme_color: '#0b0b0c',
         background_color: '#0b0b0c',
         display: 'standalone',

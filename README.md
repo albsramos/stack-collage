@@ -1,13 +1,13 @@
 # Stack
 
-A small PWA for stacking **2 or 3 photos or videos** into an Instagram **story** (9:16) or **post** (4:5, 3:4, 1:1), and exporting a high-quality file.
+A small PWA for stacking **2 or 3 photos or videos** into a **story** (9:16) or **post** (3:4), and exporting a high-quality file.
 
 Everything runs on-device in the browser — nothing is uploaded.
 
 ## Flow
 
 1. Pick a template: 2 or 3 stacked.
-2. Pick the format: Story or Post.
+2. Pick the format: Story (9:16) or Post (3:4).
 3. Slots always fill the frame edge to edge. Tap a slot (or **Add photos or videos**) to fill it. Drag to reposition, pinch / scroll to zoom. Use ↑ ↓ to reorder.
 4. **Export** → **Save**. On iPhone this opens the share sheet, so you can pick *Save Image* / *Save Video*.
 
@@ -15,7 +15,7 @@ Everything runs on-device in the browser — nothing is uploaded.
 
 | | |
 |---|---|
-| Photos only | JPEG (q 0.95) at 1080 wide — or 2160 wide with **2× master** |
+| Photos only | JPEG (q 0.95) at 1080 wide — or 2160 wide with **High · 2×** |
 | Any video | H.264 MP4, 30 fps, ~16 Mbps at 1080×1920 (×4 at 2×), AAC audio |
 
 - Video is encoded with WebCodecs via [Mediabunny](https://mediabunny.dev), frame by frame — no screen recording, so no dropped frames.

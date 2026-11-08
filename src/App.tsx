@@ -172,44 +172,45 @@ export default function App() {
   // ---------- screens ----------
   if (step === 'template') {
     return (
-      <div className="screen picker">
-        <header className="hero">
-          <h1>Stack</h1>
-          <p>Stack photos & videos for Instagram.</p>
-        </header>
-        <h2>Choose a template</h2>
-        <div className="cards">
-          {([2, 3] as Count[]).map((c) => (
-            <button key={c} className="card" onClick={() => chooseTemplate(c)}>
-              <MiniLayout count={c} formatId="story" />
-              <span className="card-title">{c} stacked</span>
-            </button>
-          ))}
-        </div>
+      <div className="screen start">
+        <div className="brand">Stack</div>
+        <main className="choose">
+          <p className="eyebrow">Layout</p>
+          <div className="options">
+            {([2, 3] as Count[]).map((c) => (
+              <button key={c} className="option" onClick={() => chooseTemplate(c)}>
+                <MiniLayout count={c} formatId="story" />
+                <span className="option-label">{c === 2 ? 'Two' : 'Three'}</span>
+              </button>
+            ))}
+          </div>
+        </main>
       </div>
     );
   }
 
   if (step === 'format') {
     return (
-      <div className="screen picker">
-        <div className="topbar">
-          <button className="icon" onClick={() => setStep('template')} aria-label="Back">
-            ‹
+      <div className="screen start">
+        <div className="brand">
+          <button className="ghost" onClick={() => setStep('template')} aria-label="Back">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
           </button>
-          <span>{count} stacked</span>
-          <span />
+          Stack
         </div>
-        <h2>Where is it going?</h2>
-        <div className="cards four">
-          {(Object.keys(FORMATS) as FormatId[]).map((f) => (
-            <button key={f} className="card" onClick={() => chooseFormat(f)}>
-              <MiniLayout count={count} formatId={f} />
-              <span className="card-title">{FORMATS[f].label}</span>
-              <span className="card-sub">{FORMATS[f].sub}</span>
-            </button>
-          ))}
-        </div>
+        <main className="choose">
+          <p className="eyebrow">Format</p>
+          <div className="options">
+            {(Object.keys(FORMATS) as FormatId[]).map((f) => (
+              <button key={f} className="option" onClick={() => chooseFormat(f)}>
+                <MiniLayout count={count} formatId={f} />
+                <span className="option-label">
+                  {FORMATS[f].label} <span className="option-sub">{FORMATS[f].sub}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </main>
       </div>
     );
   }
@@ -223,7 +224,7 @@ export default function App() {
           ‹
         </button>
         <span className="title">
-          {FORMATS[formatId].label} <small>{FORMATS[formatId].sub.split(' · ')[0]}</small>
+          {FORMATS[formatId].label} <small>{FORMATS[formatId].sub}</small>
         </span>
         <button className="primary" disabled={!filled || !!busy} onClick={doExport}>
           Export
@@ -284,10 +285,10 @@ export default function App() {
               <label>Size</label>
               <div className="chips">
                 <button className={scale === 1 ? 'chip on' : 'chip'} onClick={() => setScale(1)}>
-                  1080 · Instagram
+                  Standard
                 </button>
                 <button className={scale === 2 ? 'chip on' : 'chip'} onClick={() => setScale(2)}>
-                  2× master
+                  High · 2×
                 </button>
               </div>
             </div>
@@ -371,13 +372,23 @@ export default function App() {
 function MiniLayout({ count, formatId }: { count: Count; formatId: FormatId }) {
   const f = FORMATS[formatId];
   const rects = computeSlots(f, defaultLayout(count, formatId));
+  const gap = 14;
   return (
-    <svg viewBox={`0 0 ${f.w} ${f.h}`} className="mini" style={{ aspectRatio: `${f.w}/${f.h}` }}>
-      <rect width={f.w} height={f.h} fill="#000" />
-      {rects.map((r, i) => (
-        <rect key={i} x={r.x} y={r.y + 6} width={r.w} height={r.h - 12} fill={['#f2994a', '#eb6f6f', '#c58cf0'][i]} />
-      ))}
-    </svg>
+    <div className="mini-box">
+      <svg viewBox={`0 0 ${f.w} ${f.h}`} className="mini">
+        {rects.map((r, i) => (
+          <rect
+            key={i}
+            x={0}
+            y={r.y + (i === 0 ? 0 : gap / 2)}
+            width={f.w}
+            height={r.h - (i > 0 ? gap / 2 : 0) - (i < count - 1 ? gap / 2 : 0)}
+            rx={36}
+            className={`tile t${i}`}
+          />
+        ))}
+      </svg>
+    </div>
   );
 }
 

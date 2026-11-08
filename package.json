@@ -1,7 +1,7 @@
 {
   "name": "stack-collage",
   "version": "0.1.0",
-  "description": "PWA to stack 2 or 3 photos/videos into an Instagram story or post",
+  "description": "PWA to stack 2 or 3 photos/videos into a story or post",
   "scripts": {
     "dev": "vite --host",
     "build": "tsc -p . && vite build",
