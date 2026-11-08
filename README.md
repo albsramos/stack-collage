@@ -1,13 +1,13 @@
 # Stack
 
-A small PWA for stacking **2 or 3 photos or videos** into a **story** (9:16) or **post** (3:4), and exporting a high-quality file.
+A small PWA for stacking **2 or 3 photos or videos** into a **9:16** or **3:4** frame, and exporting a high-quality file.
 
 Everything runs on-device in the browser — nothing is uploaded.
 
 ## Flow
 
 1. Pick a template: 2 or 3 stacked.
-2. Pick the format: Story (9:16) or Post (3:4).
+2. Pick the ratio: 9:16 or 3:4.
 3. Slots always fill the frame edge to edge. Tap a slot (or **Add photos or videos**) to fill it. Drag to reposition, pinch / scroll to zoom. Use ↑ ↓ to reorder.
 4. **Export** → **Save**. On iPhone this opens the share sheet, so you can pick *Save Image* / *Save Video*.
 

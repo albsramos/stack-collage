@@ -211,7 +211,7 @@ export default function App() {
           ‹
         </button>
         <span className="title">
-          {FORMATS[formatId].label} <small>{FORMATS[formatId].sub}</small>
+          {FORMATS[formatId].label}
         </span>
         <button className="primary" disabled={!filled || !!busy} onClick={doExport}>
           Export
