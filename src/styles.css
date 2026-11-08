@@ -270,5 +270,6 @@ button.wide { width: 100%; padding: 13px; }
 
 /* Home Screen app: iOS already keeps the bottom strip clear, so don't add the safe-area spacing again */
 html[data-standalone] .start { padding-bottom: 12px; }
+html[data-standalone] .editor { padding-bottom: 0; }
 html[data-standalone] .panel { margin-bottom: 0; padding-bottom: 0; }
 html, body { transition: background-color 0.2s; }
