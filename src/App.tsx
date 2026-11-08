@@ -39,6 +39,13 @@ export default function App() {
   const [result, setResult] = useState<(ExportResult & { url: string }) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  // The strip iOS reserves below a Home Screen app shows the page background: match whatever sits at the bottom.
+  useEffect(() => {
+    const c = step === 'editor' ? '#161618' : '#09090b';
+    document.documentElement.style.backgroundColor = c;
+    document.body.style.backgroundColor = c;
+  }, [step]);
+
   const format = FORMATS[formatId];
   const active = slots.slice(0, count);
   const anyVideo = hasVideo(active);

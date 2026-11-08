@@ -3,16 +3,12 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles.css';
 
-// iOS Home Screen apps report a viewport shorter than the screen, which leaves an empty band at the bottom.
-// In standalone mode, size the app to the physical screen instead.
+// iOS 26 Home Screen apps can't draw in the strip above the home indicator; iOS fills it with the page
+// background. Mark standalone mode so CSS can drop the now-redundant bottom safe-area spacing.
 const standalone =
   (navigator as Navigator & { standalone?: boolean }).standalone === true ||
   window.matchMedia('(display-mode: standalone)').matches;
-if (standalone) {
-  const fit = () => document.documentElement.style.setProperty('--app-h', `${window.screen.height}px`);
-  fit();
-  window.addEventListener('resize', fit);
-}
+if (standalone) document.documentElement.dataset.standalone = '';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

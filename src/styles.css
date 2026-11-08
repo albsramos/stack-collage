@@ -18,10 +18,7 @@ button { font: inherit; color: inherit; }
 .screen {
   /* position:fixed fills the whole screen in iOS standalone mode, where 100dvh comes up short */
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: var(--app-h, 100%);
+  inset: 0;
   display: flex;
   flex-direction: column;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
@@ -136,7 +133,7 @@ button.danger { color: var(--danger); }
 button.wide { width: 100%; padding: 13px; }
 
 /* ---------- stage ---------- */
-.editor { overflow: hidden; }
+.editor { overflow: hidden; background: var(--bg); }
 .stage-wrap {
   flex: 1 1 auto;
   min-height: 0;
@@ -270,3 +267,8 @@ button.wide { width: 100%; padding: 13px; }
 }
 .slot-actions button:active { background: rgba(255, 255, 255, 0.12); }
 .slot-actions button.danger { color: #ff6b6b; }
+
+/* Home Screen app: iOS already keeps the bottom strip clear, so don't add the safe-area spacing again */
+html[data-standalone] .start { padding-bottom: 12px; }
+html[data-standalone] .panel { margin-bottom: 0; padding-bottom: 0; }
+html, body { transition: background-color 0.2s; }
