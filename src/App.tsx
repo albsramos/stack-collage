@@ -227,6 +227,8 @@ export default function App() {
         onSelect={(i) => setSelected(i)}
         onEmptyTap={(i) => openPicker(i)}
         onTransform={setT}
+        onMove={moveSlot}
+        onRemove={removeSlot}
       />
 
       <div className="panel">
@@ -246,15 +248,6 @@ export default function App() {
             <div className="buttons">
               <button onClick={() => openPicker(selected)}>Replace</button>
               <button onClick={() => setT(selected, { ...IDENTITY })}>Reset</button>
-              <button onClick={() => moveSlot(selected, -1)} disabled={selected === 0}>
-                ↑
-              </button>
-              <button onClick={() => moveSlot(selected, 1)} disabled={selected === count - 1}>
-                ↓
-              </button>
-              <button className="danger" onClick={() => removeSlot(selected)}>
-                Remove
-              </button>
               <button className="primary" onClick={() => setSelected(null)}>
                 Done
               </button>
@@ -390,6 +383,8 @@ interface StageProps {
   onSelect: (i: number | null) => void;
   onEmptyTap: (i: number) => void;
   onTransform: (i: number, t: Transform) => void;
+  onMove: (i: number, dir: -1 | 1) => void;
+  onRemove: (i: number) => void;
 }
 
 function Stage(p: StageProps) {
@@ -427,6 +422,9 @@ function Stage(p: StageProps) {
               onTap={() => (slot.media ? p.onSelect(i) : p.onEmptyTap(i))}
               onTransform={(t) => p.onTransform(i, t)}
               onGestureStart={() => slot.media && p.onSelect(i)}
+              onUp={i > 0 ? () => p.onMove(i, -1) : undefined}
+              onDown={i < p.slots.length - 1 ? () => p.onMove(i, 1) : undefined}
+              onRemove={() => p.onRemove(i)}
             />
           ))}
       </div>
@@ -444,9 +442,22 @@ interface SlotViewProps {
   onTap: () => void;
   onTransform: (t: Transform) => void;
   onGestureStart: () => void;
+  onUp?: () => void;
+  onDown?: () => void;
+  onRemove: () => void;
 }
 
-function SlotView({ index, rect, s, radius, slot, selected, onTap, onTransform, onGestureStart }: SlotViewProps) {
+const Icon = ({ d }: { d: string }) => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d={d} />
+  </svg>
+);
+const ICON_UP = 'M12 19V5M5 12l7-7 7 7';
+const ICON_DOWN = 'M12 5v14M19 12l-7 7-7-7';
+const ICON_TRASH = 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6';
+
+function SlotView(props: SlotViewProps) {
+  const { index, rect, s, radius, slot, selected, onTap, onTransform, onGestureStart, onUp, onDown, onRemove } = props;
   const m = slot.media;
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef<{ moved: number; startT: Transform; pinchDist?: number } | null>(null);
@@ -533,6 +544,23 @@ function SlotView({ index, rect, s, radius, slot, selected, onTap, onTransform, 
         </div>
       )}
       {m?.kind === 'video' && <span className="badge">{m.duration.toFixed(1)}s</span>}
+      {m && selected && (
+        <div className="slot-actions" onPointerDown={(e) => e.stopPropagation()}>
+          {onUp && (
+            <button aria-label="Move up" onClick={onUp}>
+              <Icon d={ICON_UP} />
+            </button>
+          )}
+          {onDown && (
+            <button aria-label="Move down" onClick={onDown}>
+              <Icon d={ICON_DOWN} />
+            </button>
+          )}
+          <button aria-label="Remove" className="danger" onClick={onRemove}>
+            <Icon d={ICON_TRASH} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

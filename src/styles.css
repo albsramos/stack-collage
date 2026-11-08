@@ -212,3 +212,34 @@ button.wide { width: 100%; padding: 13px; }
   background: #2a2a2e; padding: 10px 16px; border-radius: 12px; font-size: 14px; z-index: 20; max-width: 90vw;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
 }
+
+/* floating actions on the selected slot */
+.slot-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(9, 9, 11, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  z-index: 2;
+  cursor: default;
+}
+.slot-actions button {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #fafafa;
+  cursor: pointer;
+}
+.slot-actions button:active { background: rgba(255, 255, 255, 0.12); }
+.slot-actions button.danger { color: #ff6b6b; }
