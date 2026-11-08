@@ -11,9 +11,10 @@ export interface Format {
   h: number;
 }
 
+// Order here is the order on the start screen.
 export const FORMATS: Record<FormatId, Format> = {
-  story: { label: '9:16', sub: '9:16', w: 1080, h: 1920 },
   post: { label: '3:4', sub: '3:4', w: 1080, h: 1440 },
+  story: { label: '9:16', sub: '9:16', w: 1080, h: 1920 },
 };
 
 export const RATIOS: { id: RatioId; label: string; value: number | null }[] = [
