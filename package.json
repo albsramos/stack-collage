@@ -1,0 +1,27 @@
+{
+  "name": "stack-collage",
+  "version": "0.1.0",
+  "description": "PWA to stack 2 or 3 photos/videos into an Instagram story or post",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc -p . && vite build",
+    "preview": "vite preview --host"
+  },
+  "dependencies": {
+    "@mediabunny/aac-encoder": "^1.65.2",
+    "mediabunny": "^1.65.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.6",
+    "vite-plugin-pwa": "^2.0.0"
+  },
+  "private": true,
+  "type": "module"
+}
