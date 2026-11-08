@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import {
   FORMATS,
   IDENTITY,
-  RATIOS,
   clamp,
   computeSlots,
   defaultLayout,
@@ -19,7 +18,6 @@ import { exportCollage, hasVideo, saveResult, type ExportResult, type SlotState 
 
 type Step = 'template' | 'format' | 'editor';
 
-const BACKGROUNDS = ['#000000', '#ffffff', '#111111', '#f3eee6', '#1f2a44', '#3b2a22'];
 const MAX_DURATION = 60;
 
 const emptySlots = (): SlotState[] => [0, 1, 2].map(() => ({ media: null, t: { ...IDENTITY } }));
@@ -29,8 +27,8 @@ export default function App() {
   const [count, setCount] = useState<Count>(3);
   const [formatId, setFormatId] = useState<FormatId>('story');
   const [layout, setLayout] = useState<LayoutOpts>(defaultLayout(3, 'story'));
+  const bg = '#000000'; // never visible: slots always fill the frame
   const [slots, setSlots] = useState<SlotState[]>(emptySlots);
-  const [bg, setBg] = useState('#000000');
   const [scale, setScale] = useState<1 | 2>(1);
   const [audioFrom, setAudioFrom] = useState<number | 'auto' | null>('auto');
   const [selected, setSelected] = useState<number | null>(null);
@@ -283,40 +281,6 @@ export default function App() {
               </button>
             )}
             <div className="row">
-              <label>Shape</label>
-              <div className="chips">
-                {RATIOS.map((r) => (
-                  <button
-                    key={r.id}
-                    className={layout.ratio === r.id ? 'chip on' : 'chip'}
-                    onClick={() => setLayout({ ...layout, ratio: r.id })}
-                  >
-                    {r.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <Slider label="Gap" value={layout.gap} max={80} onChange={(gap) => setLayout({ ...layout, gap })} />
-            <Slider label="Margin" value={layout.margin} max={160} onChange={(margin) => setLayout({ ...layout, margin })} />
-            <Slider label="Corners" value={layout.radius} max={80} onChange={(radius) => setLayout({ ...layout, radius })} />
-            <div className="row">
-              <label>Background</label>
-              <div className="chips">
-                {BACKGROUNDS.map((c) => (
-                  <button
-                    key={c}
-                    className={bg === c ? 'swatch on' : 'swatch'}
-                    style={{ background: c }}
-                    onClick={() => setBg(c)}
-                    aria-label={c}
-                  />
-                ))}
-                <label className="swatch custom" style={{ background: BACKGROUNDS.includes(bg) ? undefined : bg }}>
-                  <input type="color" value={bg} onChange={(e) => setBg(e.target.value)} />
-                </label>
-              </div>
-            </div>
-            <div className="row">
               <label>Size</label>
               <div className="chips">
                 <button className={scale === 1 ? 'chip on' : 'chip'} onClick={() => setScale(1)}>
@@ -400,16 +364,6 @@ export default function App() {
       )}
 
       {toast && <div className="toast">{toast}</div>}
-    </div>
-  );
-}
-
-function Slider(p: { label: string; value: number; max: number; onChange: (v: number) => void }) {
-  return (
-    <div className="row">
-      <label>{p.label}</label>
-      <input type="range" min={0} max={p.max} step={1} value={p.value} onChange={(e) => p.onChange(+e.target.value)} />
-      <span className="val">{p.value}</span>
     </div>
   );
 }

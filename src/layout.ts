@@ -43,10 +43,9 @@ export interface Rect {
 }
 
 export function defaultLayout(count: Count, format: FormatId): LayoutOpts {
-  // Story with 3 stacked wide shots → 16:9 bands with bars top/bottom (like the reference).
-  // Posts are shorter, so filling the frame looks best.
-  const ratio: RatioId = format === 'story' ? (count === 3 ? '16:9' : '4:3') : 'fill';
-  return { count, ratio, gap: 0, margin: 0, radius: 0 };
+  // Slots always fill the whole frame edge to edge — no gaps, no background showing.
+  void format;
+  return { count, ratio: 'fill', gap: 0, margin: 0, radius: 0 };
 }
 
 /** Slot rectangles in base units (format.w × format.h). */

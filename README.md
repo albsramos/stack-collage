@@ -8,9 +8,8 @@ Everything runs on-device in the browser — nothing is uploaded.
 
 1. Pick a template: 2 or 3 stacked.
 2. Pick the format: Story or Post.
-3. Tap a slot (or **Add photos or videos**) to fill it. Drag to reposition, pinch / scroll to zoom. Use ↑ ↓ to reorder.
-4. Tweak the layout: slot shape (Fill, 16:9, 3:2, 4:3, 1:1, 4:5), gap, margin, rounded corners, background color.
-5. **Export** → **Save**. On iPhone this opens the share sheet, so you can pick *Save Image* / *Save Video*.
+3. Slots always fill the frame edge to edge. Tap a slot (or **Add photos or videos**) to fill it. Drag to reposition, pinch / scroll to zoom. Use ↑ ↓ to reorder.
+4. **Export** → **Save**. On iPhone this opens the share sheet, so you can pick *Save Image* / *Save Video*.
 
 ## Export quality
 
