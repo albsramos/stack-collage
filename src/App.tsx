@@ -308,6 +308,9 @@ export default function App() {
                 </div>
               </div>
             )}
+            {active.some((s) => s.media?.audioUnsupported) && (
+              <p className="hint">This browser can't read the sound in some clips, so they'll export silent.</p>
+            )}
             {anyVideo && <p className="hint">Shorter clips loop to match the longest (max {MAX_DURATION}s).</p>}
           </div>
         )}
