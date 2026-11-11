@@ -14,7 +14,11 @@ import {
   type Transform,
 } from './layout';
 import { loadMedia, releaseMedia, type Media } from './media';
-import { exportCollage, hasVideo, saveResult, type ExportResult, type SlotState } from './exporter';
+import type { ExportResult, SlotState } from './exporter';
+
+// The exporter pulls in mediabunny (~200 KB gzipped). Load it when it's first needed, not on startup.
+const loadExporter = () => import('./exporter');
+const hasVideo = (slots: SlotState[]) => slots.some((s) => s.media?.kind === 'video');
 
 type Step = 'start' | 'editor';
 
@@ -141,6 +145,8 @@ export default function App() {
     abortRef.current = ac;
     setBusy({ progress: 0, label: anyVideo ? 'Rendering video…' : 'Rendering…' });
     try {
+      const { exportCollage } = await loadExporter();
+      let shown = -1;
       const r = await exportCollage({
         format,
         layout,
@@ -150,7 +156,13 @@ export default function App() {
         audioFrom: resolvedAudio,
         maxDuration: MAX_DURATION,
         signal: ac.signal,
-        onProgress: (p) => setBusy((b) => (b ? { ...b, progress: p } : b)),
+        onProgress: (p, label) => {
+          // Re-render only when the visible percentage or the label changes, not on every one of up to 1,800 frames.
+          const pct = Math.floor(p * 100);
+          if (pct === shown && !label) return;
+          shown = pct;
+          setBusy((b) => (b ? { label: label ?? b.label, progress: p } : b));
+        },
       });
       setResult({ ...r, url: URL.createObjectURL(r.blob) });
       if (r.warning) showToast(r.warning);
@@ -166,7 +178,10 @@ export default function App() {
   };
 
   const closeResult = () => {
-    if (result) URL.revokeObjectURL(result.url);
+    if (result) {
+      URL.revokeObjectURL(result.url);
+      result.release?.().catch(() => {}); // delete the on-disk file behind it
+    }
     setResult(null);
   };
 
@@ -218,7 +233,7 @@ export default function App() {
     <div className="screen editor">
       <div className="topbar">
         <button className="icon" onClick={() => { setSelected(null); setStep('start'); }} aria-label="Back">
-          ‹
+          <Icon d={ICON_BACK} size={22} />
         </button>
         <span className="title">
           {FORMATS[formatId].label}
@@ -271,6 +286,11 @@ export default function App() {
                 Add photos or videos
               </button>
             )}
+            {!filled && (
+              <p className="hint">
+                Fill all {count} slots to export · {active.filter((s) => s.media).length} of {count} done
+              </p>
+            )}
             <div className="row end">
               <label>Size</label>
               <div className="chips">
@@ -302,6 +322,9 @@ export default function App() {
                   )}
                 </div>
               </div>
+            )}
+            {active.some((s) => s.media?.audioUnsupported) && (
+              <p className="hint">This browser can't read the sound in some clips, so they'll export silent.</p>
             )}
             {anyVideo && <p className="hint">Shorter clips loop to match the longest (max {MAX_DURATION}s).</p>}
           </div>
@@ -344,7 +367,14 @@ export default function App() {
             <p className="muted">
               {format.w * scale}×{format.h * scale} · {(result.blob.size / 1e6).toFixed(1)} MB
             </p>
-            <button className="primary wide" onClick={() => saveResult(result).catch((e) => showToast((e as Error).message))}>
+            <button
+              className="primary wide"
+              onClick={() =>
+                loadExporter()
+                  .then(({ saveResult }) => saveResult(result))
+                  .catch((e) => showToast((e as Error).message))
+              }
+            >
               Save
             </button>
             <button className="wide" onClick={closeResult}>
@@ -404,8 +434,9 @@ function Stage(p: StageProps) {
 
   useLayoutEffect(() => {
     const el = wrap.current!;
-    const ro = new ResizeObserver(() => {
-      const r = el.getBoundingClientRect();
+    // contentRect excludes .stage-wrap's padding, so the frame fits the space it actually gets.
+    const ro = new ResizeObserver(([entry]) => {
+      const r = entry.contentRect;
       const s = Math.min(r.width / f.w, r.height / f.h);
       setSize({ w: f.w * s, h: f.h * s });
     });
@@ -457,11 +488,12 @@ interface SlotViewProps {
   onRemove: () => void;
 }
 
-const Icon = ({ d }: { d: string }) => (
-  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+const Icon = ({ d, size = 18 }: { d: string; size?: number }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d={d} />
   </svg>
 );
+const ICON_BACK = 'M15 18l-6-6 6-6';
 const ICON_UP = 'M12 19V5M5 12l7-7 7 7';
 const ICON_DOWN = 'M12 5v14M19 12l-7 7-7-7';
 const ICON_TRASH = 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6';
