@@ -16,6 +16,8 @@
 
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; height: 100%; background: var(--bg); color: var(--text); overscroll-behavior: none; }
+/* Pinch-to-zoom the page stays available (low vision); only double-tap zoom is turned off. */
+html { touch-action: manipulation; }
 button { font: inherit; color: inherit; }
 /* White, so keyboard focus never looks like the blue selection border. */
 :focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
@@ -172,6 +174,12 @@ button.wide { width: 100%; padding: 13px; }
 }
 /* Empty slots: plain tiles with a small gap between them; the gap disappears once a photo fills the slot. */
 .slot.empty { cursor: pointer; background: transparent; }
+/* Invisible full-size button: gives each slot a keyboard focus stop and a screen-reader name. */
+.slot-hit {
+  position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; margin: 0;
+  border: 0; background: transparent; cursor: inherit; border-radius: inherit;
+}
+.slot-hit:focus-visible { outline: 3px solid var(--text); outline-offset: -3px; } /* white: not the selection blue */
 .placeholder {
   position: absolute; inset: 3px; border-radius: 10px; background: #2a2a2e;
   transition: background 0.15s; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -198,16 +206,22 @@ button.wide { width: 100%; padding: 13px; }
 }
 .tools { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
 .row { display: flex; align-items: center; gap: 12px; }
-.row > label { width: 84px; flex: none; color: var(--muted); font-size: 14px; }
+.row > label, .row > .label { width: 84px; flex: none; color: var(--muted); font-size: 14px; }
 .row input[type='range'] { flex: 1; accent-color: var(--accent); }
 .row.end { justify-content: flex-end; }
-.row.end > label { width: auto; }
+.row.end > label, .row.end > .label { width: auto; }
 .row.end .chips { flex: 0 1 auto; }
 .chips { display: flex; gap: 8px; overflow-x: auto; flex: 1; padding: 4px; scrollbar-width: none; } /* room for focus rings */
 .chips::-webkit-scrollbar { display: none; }
 .chip { padding: 8px 12px; font-size: 14px; border-radius: 10px; }
 .chip.on { background: var(--text); color: #111; border-color: var(--text); }
 .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.nudge { display: flex; gap: 8px; }
+.nudge button {
+  width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--panel); cursor: pointer; padding: 0;
+}
+.editor-main { display: contents; }
 .hint { margin: 0; color: var(--muted); font-size: 12px; text-align: center; }
 
 /* ---------- overlays ---------- */
@@ -220,6 +234,7 @@ button.wide { width: 100%; padding: 13px; }
   display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center;
 }
 .sheet p { margin: 0; }
+.sheet-note { font-size: 14px; color: var(--text); }
 .muted { color: var(--muted); font-size: 13px; }
 .bar { width: 100%; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .bar > div { height: 100%; background: var(--accent); transition: width 0.15s; }
@@ -241,6 +256,7 @@ button.wide { width: 100%; padding: 13px; }
 /* floating actions on the selected slot */
 .slot-actions {
   position: absolute;
+  z-index: 3;
   top: 8px;
   right: 8px;
   display: flex;
@@ -251,7 +267,6 @@ button.wide { width: 100%; padding: 13px; }
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  z-index: 2;
   cursor: default;
 }
 .slot-actions button {
