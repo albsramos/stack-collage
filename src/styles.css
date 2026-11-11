@@ -5,6 +5,7 @@
   --text: #f4f4f5;
   --muted: #b4b4bc;
   --accent: #1f6feb; /* white text on it is 4.6:1 (WCAG AA) */
+  --accent-text: #6ea8ff; /* the accent as text on dark surfaces: 5.9:1 on the toast */
   --disabled-bg: #232326;
   --disabled-text: #8b8b94; /* 4.6:1 on --disabled-bg */
   --danger: #ff5a5f;
@@ -228,7 +229,14 @@ button.wide { width: 100%; padding: 13px; }
   position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%);
   background: #2a2a2e; padding: 10px 16px; border-radius: 12px; font-size: 14px; z-index: 20; max-width: 90vw;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  display: flex; align-items: center; gap: 12px;
 }
+.toast.error { box-shadow: 0 0 0 1px var(--danger), 0 6px 24px rgba(0, 0, 0, 0.4); }
+.toast button {
+  flex: none; min-height: 44px; min-width: 44px; margin: -10px -8px -10px 0; padding: 0 8px;
+  border: 0; background: none; color: var(--accent-text); font-weight: 600; font-size: 15px; cursor: pointer;
+}
+.toast.error button { color: var(--text); font-size: 20px; }
 
 /* floating actions on the selected slot */
 .slot-actions {
