@@ -218,7 +218,7 @@ export default function App() {
     <div className="screen editor">
       <div className="topbar">
         <button className="icon" onClick={() => { setSelected(null); setStep('start'); }} aria-label="Back">
-          ‹
+          <Icon d={ICON_BACK} size={22} />
         </button>
         <span className="title">
           {FORMATS[formatId].label}
@@ -270,6 +270,11 @@ export default function App() {
               <button className="primary wide" onClick={() => openPicker('fill')}>
                 Add photos or videos
               </button>
+            )}
+            {!filled && (
+              <p className="hint">
+                Fill all {count} slots to export · {active.filter((s) => s.media).length} of {count} done
+              </p>
             )}
             <div className="row end">
               <label>Size</label>
@@ -404,8 +409,9 @@ function Stage(p: StageProps) {
 
   useLayoutEffect(() => {
     const el = wrap.current!;
-    const ro = new ResizeObserver(() => {
-      const r = el.getBoundingClientRect();
+    // contentRect excludes .stage-wrap's padding, so the frame fits the space it actually gets.
+    const ro = new ResizeObserver(([entry]) => {
+      const r = entry.contentRect;
       const s = Math.min(r.width / f.w, r.height / f.h);
       setSize({ w: f.w * s, h: f.h * s });
     });
@@ -457,11 +463,12 @@ interface SlotViewProps {
   onRemove: () => void;
 }
 
-const Icon = ({ d }: { d: string }) => (
-  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+const Icon = ({ d, size = 18 }: { d: string; size?: number }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d={d} />
   </svg>
 );
+const ICON_BACK = 'M15 18l-6-6 6-6';
 const ICON_UP = 'M12 19V5M5 12l7-7 7 7';
 const ICON_DOWN = 'M12 5v14M19 12l-7 7-7-7';
 const ICON_TRASH = 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6';
