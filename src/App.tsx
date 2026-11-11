@@ -38,12 +38,42 @@ const UNDO_MS = 6000;
 // React StrictMode runs effects twice in development: make sure the history fix-up below runs once.
 let historyNormalized = false;
 
+// The last template picked, so a returning user only has to tap Start.
+const TEMPLATE_KEY = 'stack.template';
+function loadTemplate(): { count: Count | null; format: FormatId | null } {
+  try {
+    const v = JSON.parse(localStorage.getItem(TEMPLATE_KEY) ?? 'null') as { count?: unknown; format?: unknown } | null;
+    return {
+      count: v?.count === 2 || v?.count === 3 ? v.count : null,
+      // hasOwn, not `in`: "constructor" or "toString" would pass an `in` check.
+      format: typeof v?.format === 'string' && Object.hasOwn(FORMATS, v.format) ? (v.format as FormatId) : null,
+    };
+  } catch {
+    return { count: null, format: null }; // storage blocked (private mode) or corrupted
+  }
+}
+function saveTemplate(count: Count, format: FormatId) {
+  try {
+    localStorage.setItem(TEMPLATE_KEY, JSON.stringify({ count, format }));
+  } catch {
+    // Not remembering is fine.
+  }
+}
+
+const prefersReducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 export default function App() {
   const [step, setStep] = useState<Step>('start');
   const [count, setCount] = useState<Count>(3);
   const [formatId, setFormatId] = useState<FormatId>('story');
-  const [pickCount, setPickCount] = useState<Count | null>(null);
-  const [pickFormat, setPickFormat] = useState<FormatId | null>(null);
+  const [saved] = useState(loadTemplate);
+  const [pickCount, setPickCount] = useState<Count | null>(saved.count);
+  const [pickFormat, setPickFormat] = useState<FormatId | null>(saved.format);
+  // Preview playback. Clips loop muted by default (not at all under reduced motion); "with sound" plays the
+  // chosen Sound clip out loud, restarted together, so you can hear the export before making it.
+  const [playing, setPlaying] = useState(() => !prefersReducedMotion());
+  const [previewSound, setPreviewSound] = useState(false);
+  const [hasSelected, setHasSelected] = useState(false);
   const [layout, setLayout] = useState<LayoutOpts>(defaultLayout(3, 'story'));
   const bg = '#000000'; // never visible: slots always fill the frame
   const [slots, setSlots] = useState<SlotState[]>(emptySlots);
@@ -277,6 +307,7 @@ export default function App() {
     // Normally push; if we're already on an "editor" entry (back then forward) reuse it so Back stays one step.
     if ((history.state as { stack?: string } | null)?.stack === 'editor') history.replaceState({ stack: 'editor' }, '');
     else history.pushState({ stack: 'editor' }, '');
+    saveTemplate(pickCount, pickFormat);
   };
 
   const back = () => {
@@ -295,6 +326,38 @@ export default function App() {
     const i = active.findIndex(withSound);
     return i >= 0 ? i : null;
   }, [audioFrom, active]);
+
+  // Play/unmute right here in the click handler, not later in an effect: iOS only lets media start with sound
+  // inside the user's gesture. The state then keeps React's view of it in step.
+  const previewVideos = () => [...document.querySelectorAll<HTMLVideoElement>('.slot video')];
+  const togglePlaying = () => {
+    const next = !playing;
+    for (const v of previewVideos()) {
+      if (next) v.play().catch(() => {});
+      else v.pause();
+    }
+    setPlaying(next);
+    if (!next) setPreviewSound(false);
+  };
+  const soundId = resolvedAudio !== null ? active[resolvedAudio].media?.id : undefined;
+  const heardId = useRef<string | undefined>(undefined);
+  const toggleSound = () => {
+    const next = !previewSound;
+    heardId.current = next ? soundId : undefined;
+    for (const v of previewVideos()) {
+      if (next) v.currentTime = 0; // restart together, like the export
+      v.muted = !(next && v.dataset.mediaId === soundId);
+      v.play().catch(() => {});
+    }
+    setPreviewSound(next);
+    setPlaying(true);
+  };
+
+  // The clip being heard changed without a tap (it was removed, replaced, or another came back by Undo):
+  // iOS won't unmute the new one from an effect, so turn preview sound off rather than show it on but silent.
+  useEffect(() => {
+    if (previewSound && soundId !== heardId.current) setPreviewSound(false);
+  }, [previewSound, soundId]);
 
   const doExport = async () => {
     setSelected(null);
@@ -428,8 +491,18 @@ export default function App() {
         slots={active}
         bg={bg}
         selected={selected}
-        onSelect={(i) => setSelected(i)}
+        onSelect={(i) => {
+          setSelected(i);
+          if (i !== null) setHasSelected(true);
+        }}
         onDeselect={deselect}
+        playing={playing && !busy}
+        onPlayBlocked={() => {
+          // e.g. Low Power Mode blocks autoplay: show Play, so the button tells the truth.
+          setPlaying(false);
+          setPreviewSound(false);
+        }}
+        soundFrom={previewSound ? resolvedAudio : null}
         onEmptyTap={(i) => openPicker(i)}
         onTransform={setT}
         onNudge={nudge}
@@ -508,7 +581,10 @@ export default function App() {
                   <button
                     className={resolvedAudio === null ? 'chip on' : 'chip'}
                     aria-pressed={resolvedAudio === null}
-                    onClick={() => setAudioFrom(null)}
+                    onClick={() => {
+                      setAudioFrom(null);
+                      setPreviewSound(false);
+                    }}
                   >
                     Off
                   </button>
@@ -518,7 +594,11 @@ export default function App() {
                         key={i}
                         className={resolvedAudio === i ? 'chip on' : 'chip'}
                         aria-pressed={resolvedAudio === i}
-                        onClick={() => setAudioFrom(s.media!.id)}
+                        onClick={() => {
+                          setAudioFrom(s.media!.id);
+                          // Switching which clip is heard can't unmute it outside a tap on iOS: start over muted.
+                          setPreviewSound(false);
+                        }}
                       >
                         Video {i + 1}
                       </button>
@@ -526,6 +606,25 @@ export default function App() {
                   )}
                 </div>
               </div>
+            )}
+            {anyVideo && (
+              <div className="row end">
+                <span className="label" id="preview-label">Preview</span>
+                <div className="chips" role="group" aria-labelledby="preview-label">
+                  {/* The label says the state, so no aria-pressed: a toggle shouldn't change both. */}
+                  <button className="chip" onClick={togglePlaying}>
+                    {playing ? 'Pause' : 'Play'}
+                  </button>
+                  {resolvedAudio !== null && (
+                    <button className={previewSound ? 'chip on' : 'chip'} aria-pressed={previewSound} onClick={toggleSound}>
+                      With sound
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            {!hasSelected && active.some((s) => s.media) && (
+              <p className="hint">Tap a photo or video to move, zoom, reorder or remove it.</p>
             )}
             {active.some((s) => s.media?.audioUnsupported) && (
               <p className="hint">This browser can't read the sound in some clips, so they'll export silent.</p>
@@ -706,6 +805,10 @@ interface StageProps {
   onNudge: (i: number, dx: number, dy: number, dz?: number) => void;
   onMove: (i: number, dir: -1 | 1) => void;
   onRemove: (i: number) => void;
+  playing: boolean;
+  /** Index of the slot whose sound plays in the preview, if any. */
+  soundFrom: number | null;
+  onPlayBlocked: () => void;
 }
 
 function Stage(p: StageProps) {
@@ -743,6 +846,9 @@ function Stage(p: StageProps) {
               radius={p.layout.radius}
               slot={slot}
               selected={p.selected === i}
+              playing={p.playing}
+              sound={p.soundFrom === i}
+              onPlayBlocked={p.onPlayBlocked}
               onTap={() => (slot.media ? p.onSelect(i) : p.onEmptyTap(i))}
               onTransform={(t) => p.onTransform(i, t)}
               onNudge={(dx, dy, dz) => p.onNudge(i, dx, dy, dz)}
@@ -766,6 +872,9 @@ interface SlotViewProps {
   radius: number;
   slot: SlotState;
   selected: boolean;
+  playing: boolean;
+  sound: boolean;
+  onPlayBlocked: () => void;
   onTap: () => void;
   onTransform: (t: Transform) => void;
   onNudge: (dx: number, dy: number, dz?: number) => void;
@@ -797,9 +906,25 @@ function slotLabel(index: number, count: number, m: SlotState['media'], selected
 
 function SlotView(props: SlotViewProps) {
   const { index, count, rect, s, radius, slot, selected, onTap, onTransform, onNudge, onDeselect, onGestureStart } = props;
-  const { onUp, onDown, onRemove } = props;
+  const { onUp, onDown, onRemove, playing, sound, onPlayBlocked } = props;
+  const onPlayBlockedRef = useRef(onPlayBlocked);
+  onPlayBlockedRef.current = onPlayBlocked;
   const m = slot.media;
   const el = useRef<HTMLDivElement>(null);
+  const video = useRef<HTMLVideoElement>(null);
+
+  // Keep the element in step with the preview state (React doesn't reliably update `muted` as a prop).
+  useEffect(() => {
+    const v = video.current;
+    if (!v) return;
+    v.muted = !sound;
+    if (playing) {
+      v.play().catch((e: DOMException) => {
+        if (e.name === 'NotAllowedError') onPlayBlockedRef.current(); // AbortError just means a pause() won
+      });
+    }
+    else v.pause();
+  }, [playing, sound]);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef<{ moved: number; startT: Transform; pinchDist?: number } | null>(null);
   // A drag or pinch ends with a click like any tap would: swallow that one.
@@ -955,7 +1080,9 @@ function SlotView(props: SlotViewProps) {
       onClick={onClick}
     >
       {m?.kind === 'image' && <img src={m.url} style={mediaStyle} draggable={false} alt="" />}
-      {m?.kind === 'video' && <video src={m.url} style={mediaStyle} autoPlay loop muted playsInline />}
+      {m?.kind === 'video' && (
+        <video ref={video} data-media-id={m.id} src={m.url} style={mediaStyle} loop muted playsInline preload="auto" />
+      )}
       {!m && (
         <div className="placeholder" aria-hidden="true">
           <span className="plus">+</span>
