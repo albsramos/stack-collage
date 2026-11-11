@@ -14,7 +14,11 @@ import {
   type Transform,
 } from './layout';
 import { loadMedia, releaseMedia, type Media } from './media';
-import { exportCollage, hasVideo, saveResult, type ExportResult, type SlotState } from './exporter';
+import type { ExportResult, SlotState } from './exporter';
+
+// The exporter pulls in mediabunny (~200 KB gzipped). Load it when it's first needed, not on startup.
+const loadExporter = () => import('./exporter');
+const hasVideo = (slots: SlotState[]) => slots.some((s) => s.media?.kind === 'video');
 
 type Step = 'start' | 'editor';
 
@@ -141,6 +145,8 @@ export default function App() {
     abortRef.current = ac;
     setBusy({ progress: 0, label: anyVideo ? 'Rendering video…' : 'Rendering…' });
     try {
+      const { exportCollage } = await loadExporter();
+      let shown = -1;
       const r = await exportCollage({
         format,
         layout,
@@ -150,7 +156,13 @@ export default function App() {
         audioFrom: resolvedAudio,
         maxDuration: MAX_DURATION,
         signal: ac.signal,
-        onProgress: (p) => setBusy((b) => (b ? { ...b, progress: p } : b)),
+        onProgress: (p, label) => {
+          // Re-render only when the visible percentage or the label changes, not on every one of up to 1,800 frames.
+          const pct = Math.floor(p * 100);
+          if (pct === shown && !label) return;
+          shown = pct;
+          setBusy((b) => (b ? { label: label ?? b.label, progress: p } : b));
+        },
       });
       setResult({ ...r, url: URL.createObjectURL(r.blob) });
       if (r.warning) showToast(r.warning);
@@ -166,7 +178,10 @@ export default function App() {
   };
 
   const closeResult = () => {
-    if (result) URL.revokeObjectURL(result.url);
+    if (result) {
+      URL.revokeObjectURL(result.url);
+      result.release?.().catch(() => {}); // delete the on-disk file behind it
+    }
     setResult(null);
   };
 
@@ -352,7 +367,14 @@ export default function App() {
             <p className="muted">
               {format.w * scale}×{format.h * scale} · {(result.blob.size / 1e6).toFixed(1)} MB
             </p>
-            <button className="primary wide" onClick={() => saveResult(result).catch((e) => showToast((e as Error).message))}>
+            <button
+              className="primary wide"
+              onClick={() =>
+                loadExporter()
+                  .then(({ saveResult }) => saveResult(result))
+                  .catch((e) => showToast((e as Error).message))
+              }
+            >
               Save
             </button>
             <button className="wide" onClick={closeResult}>

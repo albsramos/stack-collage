@@ -10,6 +10,9 @@ import {
   Mp4OutputFormat,
   Output,
   QUALITY_HIGH,
+  StreamTarget,
+  type Target,
+  type VideoCodec,
   canEncodeAudio,
   getFirstEncodableAudioCodec,
   getFirstEncodableVideoCodec,
@@ -31,7 +34,8 @@ export interface ExportOpts {
   scale: 1 | 2; // 1 = 1080 wide (Instagram native), 2 = 2160 wide
   audioFrom: number | null; // slot index or null for silent
   maxDuration: number; // seconds
-  onProgress?: (p: number) => void;
+  /** 0…1, plus a label when the phase changes (e.g. "Finishing…"). */
+  onProgress?: (p: number, label?: string) => void;
   signal?: AbortSignal;
 }
 
@@ -39,6 +43,8 @@ export interface ExportResult {
   blob: Blob;
   filename: string;
   warning?: string;
+  /** Frees what backs `blob` (an on-disk file for video). Call once the result is no longer shown or saved. */
+  release?: () => Promise<void>;
 }
 
 const FPS = 30;
@@ -67,13 +73,31 @@ function clipSlot(ctx: CanvasRenderingContext2D, r: Rect, radius: number) {
 /** What to draw in a slot. `cropped` sources already hold exactly the slot's visible area. */
 type SlotSource = { src: CanvasImageSource; cropped: boolean } | null;
 
-function drawFrame(ctx: CanvasRenderingContext2D, o: ExportOpts, rects: Rect[], sources: SlotSource[]) {
-  const k = o.scale;
+function drawBackground(ctx: CanvasRenderingContext2D, o: ExportOpts) {
   ctx.fillStyle = o.background;
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+}
+
+/** Draw the slots `only` selects (all by default). Slots never overlap, so each can be redrawn on its own. */
+function drawSlots(
+  ctx: CanvasRenderingContext2D,
+  o: ExportOpts,
+  rects: Rect[],
+  sources: SlotSource[],
+  only: (i: number) => boolean = () => true,
+  repaint = false,
+) {
+  const k = o.scale;
   o.slots.forEach((s, i) => {
+    if (!only(i)) return;
     const src = sources[i];
     const r = scaleRect(rects[i], k);
+    // Redrawing over the last frame: reset the slot's box first, or antialiased rounded corners would blend with
+    // every previous frame instead of the background.
+    if (repaint) {
+      ctx.fillStyle = o.background;
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+    }
     ctx.save();
     clipSlot(ctx, r, o.layout.radius * k);
     if (s.media && src?.cropped) {
@@ -97,7 +121,7 @@ const stamp = () => {
 
 const photoSource = (s: SlotState): SlotSource => (s.media?.image ? { src: s.media.image, cropped: false } : null);
 
-export function hasVideo(slots: SlotState[]) {
+function hasVideo(slots: SlotState[]) {
   return slots.some((s) => s.media?.kind === 'video');
 }
 
@@ -110,7 +134,8 @@ async function exportImage(o: ExportOpts): Promise<ExportResult> {
   const H = o.format.h * o.scale;
   const { c, ctx } = makeCanvas(W, H);
   const rects = computeSlots(o.format, o.layout);
-  drawFrame(ctx, o, rects, o.slots.map(photoSource));
+  drawBackground(ctx, o);
+  drawSlots(ctx, o, rects, o.slots.map(photoSource));
   o.onProgress?.(1);
   const blob = await new Promise<Blob>((res, rej) =>
     c.toBlob((b) => (b ? res(b) : rej(new Error('Could not encode image'))), 'image/jpeg', 0.95),
@@ -188,7 +213,6 @@ async function exportVideo(o: ExportOpts): Promise<ExportResult> {
   const k = o.scale;
   const W = o.format.w * k;
   const H = o.format.h * k;
-  const rects = computeSlots(o.format, o.layout);
   const longest = Math.max(...o.slots.map((s) => (s.media?.kind === 'video' ? s.media.duration : 0)));
   const duration = Math.min(longest, o.maxDuration);
   const total = Math.max(1, Math.round(duration * FPS));
@@ -196,12 +220,35 @@ async function exportVideo(o: ExportOpts): Promise<ExportResult> {
   const videoCodec = await getFirstEncodableVideoCodec(['avc', 'hevc'], { width: W, height: H });
   if (!videoCodec) throw new Error(`This browser can't encode ${W}×${H} video. Try the Standard size.`);
 
-  const { c, ctx } = makeCanvas(W, H);
-  const output = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() });
+  const sink = await openOutputFile();
+  try {
+    const { warning } = await encodeVideo(o, sink, videoCodec, duration, total);
+    // Cancel tapped during "Finishing…": the file is complete, but the user asked to stop.
+    if (o.signal?.aborted) throw new DOMException('Export cancelled', 'AbortError');
+    return { blob: await sink.result(), filename: `collage-${stamp()}.mp4`, warning, release: sink.discard };
+  } catch (e) {
+    await sink.discard(); // whatever failed — setup included — leaves no file behind
+    throw e;
+  }
+}
+
+async function encodeVideo(
+  o: ExportOpts,
+  sink: OutputFile,
+  videoCodec: VideoCodec,
+  duration: number,
+  total: number,
+): Promise<{ warning?: string }> {
+  const k = o.scale;
+  const rects = computeSlots(o.format, o.layout);
+  const { c, ctx } = makeCanvas(o.format.w * k, o.format.h * k);
+  const output = new Output({ format: new Mp4OutputFormat({ fastStart: sink.fastStart }), target: sink.target });
   const videoSource = new CanvasSource(c, {
     codec: videoCodec,
     // ~16 Mbps at 1080×1920 — well above what Instagram keeps, so their re-encode starts from a clean master.
-    bitrate: Math.round(16_000_000 * k * k),
+    // At 2× this grows by k^1.5 (~45 Mbps), not k² (64 Mbps): the extra bits buy little once the encoder has 4× the
+    // pixels to spend them on, and a 60 s 2× file stays ~340 MB instead of ~480 MB.
+    bitrate: Math.round(16_000_000 * k ** 1.5),
     keyFrameInterval: 2,
   });
   output.addVideoTrack(videoSource, { frameRate: FPS });
@@ -212,6 +259,10 @@ async function exportVideo(o: ExportOpts): Promise<ExportResult> {
   const checkAborted = () => {
     if (stop.signal.aborted) throw new DOMException('Export cancelled', 'AbortError');
   };
+  // Progress is the slower of the two tracks, so the bar doesn't sit at 100% while sound is still encoding.
+  let videoDone = 0;
+  let audioDone = 1;
+  const report = () => o.onProgress?.(Math.min(videoDone, audioDone));
 
   // Optional audio from one video slot.
   let warning: string | undefined;
@@ -230,12 +281,19 @@ async function exportVideo(o: ExportOpts): Promise<ExportResult> {
         transform: { sampleRate: 48000, numberOfChannels: 2 },
       });
       output.addAudioTrack(audioSource);
+      audioDone = 0;
       audioTask = async () => {
         const input = new Input({ source: new BlobSource(audioMedia.file), formats: ALL_FORMATS });
         try {
           const track = await input.getPrimaryAudioTrack();
-          if (!track) return;
-          await writeLoopedAudio(audioSource, new AudioBufferSink(track), audioMedia, duration, checkAborted);
+          if (!track) {
+            audioDone = 1;
+            return;
+          }
+          await writeLoopedAudio(audioSource, new AudioBufferSink(track), audioMedia, duration, checkAborted, (p) => {
+            audioDone = p;
+            report();
+          });
         } finally {
           audioSource.close();
           input.dispose?.();
@@ -245,14 +303,20 @@ async function exportVideo(o: ExportOpts): Promise<ExportResult> {
   }
 
   const feeds: (VideoFeed | null)[] = o.slots.map(() => null);
+  const isVideo = (i: number) => feeds[i] !== null;
   const videoTask = async () => {
     try {
+      // Photos don't change: draw them once and from then on redraw only the video slots. Downscaling a 12–48 MP
+      // photo 1,800 times (60 s × 30 fps) was most of the per-frame work.
+      drawBackground(ctx, o);
+      drawSlots(ctx, o, rects, o.slots.map(photoSource), (i) => !isVideo(i));
       for (let f = 0; f < total; f++) {
         checkAborted();
-        const frames = await Promise.all(o.slots.map((s, i) => feeds[i]?.next() ?? photoSource(s)));
-        drawFrame(ctx, o, rects, frames);
+        const frames = await Promise.all(o.slots.map((_, i) => feeds[i]?.next() ?? null));
+        drawSlots(ctx, o, rects, frames, isVideo, true);
         await videoSource.add(f / FPS, 1 / FPS);
-        o.onProgress?.((f + 1) / total);
+        videoDone = (f + 1) / total;
+        report();
       }
     } finally {
       videoSource.close();
@@ -281,6 +345,7 @@ async function exportVideo(o: ExportOpts): Promise<ExportResult> {
     const settled = await Promise.allSettled([run(videoTask), audioTask ? run(audioTask) : Promise.resolve()]);
     const failed = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected');
     if (failed) throw failed.reason;
+    o.onProgress?.(1, 'Finishing…');
     await output.finalize();
   } catch (e) {
     await output.cancel().catch(() => {});
@@ -292,8 +357,65 @@ async function exportVideo(o: ExportOpts): Promise<ExportResult> {
     await Promise.all(feeds.map((f) => f?.close().catch(() => {})));
   }
 
-  const buf = (output.target as BufferTarget).buffer!;
-  return { blob: new Blob([buf], { type: 'video/mp4' }), filename: `collage-${stamp()}.mp4`, warning };
+  return { warning };
+}
+
+const EXPORT_PREFIX = 'stack-export-';
+/** Export files older than this are leftovers (closed results, killed sessions); newer ones may be another tab's. */
+const STALE_MS = 60 * 60 * 1000;
+
+type OutputFile = Awaited<ReturnType<typeof openOutputFile>>;
+
+/**
+ * Where the MP4 is written. In the origin's private file system (OPFS) when the browser can write to it, so a long
+ * 2× export streams to disk instead of being held in memory (and then copied again into a Blob), which could get
+ * the tab killed on iPhone. Falls back to memory where OPFS writes aren't available.
+ */
+async function openOutputFile(): Promise<{
+  target: Target;
+  fastStart: false | 'in-memory';
+  result(): Promise<Blob>;
+  discard(): Promise<void>;
+}> {
+  try {
+    // Safari before 26 has OPFS but no createWritable: check before creating a file we couldn't write.
+    if (typeof FileSystemFileHandle === 'undefined' || !('createWritable' in FileSystemFileHandle.prototype)) {
+      throw new Error('No OPFS writable streams');
+    }
+    const root = await navigator.storage.getDirectory();
+    // Each result deletes its own file when it's closed. Sweep up only old leftovers (a session killed mid-export):
+    // a recent file may belong to an export or result open in another tab.
+    for await (const entry of (root as unknown as { keys(): AsyncIterable<string> }).keys()) {
+      const made = parseInt(entry.slice(EXPORT_PREFIX.length), 10); // "<ms>-<random>.mp4"
+      if (entry.startsWith(EXPORT_PREFIX) && !(Date.now() - made < STALE_MS)) await root.removeEntry(entry).catch(() => {});
+    }
+    const name = `${EXPORT_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`;
+    const handle = await root.getFileHandle(name, { create: true });
+    const writable = await handle.createWritable();
+    return {
+      // Writes land at explicit byte positions, which the OPFS stream supports, so the MP4 index can go at the
+      // end (fastStart: false) instead of buffering the whole file to put it first.
+      target: new StreamTarget(writable, { chunked: true, chunkSize: 4 * 1024 * 1024 }),
+      fastStart: false,
+      async result() {
+        const file = await handle.getFile();
+        return file.slice(0, file.size, 'video/mp4');
+      },
+      async discard() {
+        await root.removeEntry(name).catch(() => {});
+      },
+    };
+  } catch {
+    const target = new BufferTarget();
+    return {
+      target,
+      fastStart: 'in-memory',
+      async result() {
+        return new Blob([target.buffer!], { type: 'video/mp4' });
+      },
+      async discard() {},
+    };
+  }
 }
 
 /** AAC if the browser can encode it (loading the WASM encoder if needed), else Opus, else null. */
@@ -321,13 +443,17 @@ async function writeLoopedAudio(
   media: Media,
   duration: number,
   checkAborted: () => void,
+  onProgress: (p: number) => void,
 ) {
   // Take the format from the decoded audio, not the track metadata: they differ for HE-AAC (SBR, parametric
   // stereo), and silence must match the real buffers or the encoder rejects the change.
   const probe = sink.buffers(media.start, media.start + loopLength(media));
   const first = await probe.next();
   await probe.return(undefined);
-  if (first.done) return; // no audio in the looped range
+  if (first.done) {
+    onProgress(1); // no audio in the looped range
+    return;
+  }
   const rate = first.value.buffer.sampleRate;
   const channels = first.value.buffer.numberOfChannels;
   const loopLen = loopLength(media);
@@ -342,6 +468,7 @@ async function writeLoopedAudio(
       written += len;
       n -= len;
     }
+    onProgress(written / totalSamples);
   };
 
   for (let passStart = 0; passStart < totalSamples; passStart += loopSamples) {
@@ -357,6 +484,7 @@ async function writeLoopedAudio(
       if (to > from) {
         await out.add(sliceAudio(buffer, from, to));
         written += to - from;
+        onProgress(written / totalSamples);
       }
       if (written >= passEnd) break;
     }
