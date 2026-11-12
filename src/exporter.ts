@@ -11,8 +11,9 @@ import {
   Output,
   QUALITY_HIGH,
   canEncodeAudio,
+  canEncodeVideo,
   getFirstEncodableAudioCodec,
-  getFirstEncodableVideoCodec,
+  type VideoCodec,
   type WrappedCanvas,
 } from 'mediabunny';
 import { computeSlots, mediaRect, type Format, type LayoutOpts, type Rect, type Transform } from './layout';
@@ -156,6 +157,26 @@ async function openVideoFeed(media: Media, rect: Rect, s: SlotState, total: numb
   };
 }
 
+/**
+ * Find a codec + bitrate the device's encoder actually accepts. iOS Safari rejects some bitrates at a given
+ * resolution, so check the exact config we'll use (codec, size, bitrate, frame rate) and step the bitrate down
+ * until one passes, before falling back to HEVC.
+ */
+async function pickVideoEncoding(width: number, height: number, k: number) {
+  // ~16 Mbps at 1080×1920 is well above what Instagram keeps, so their re-encode starts from a clean master.
+  // Lower rungs still look fine; the first one the encoder accepts wins.
+  const mbps = [16, 12, 10, 8, 6, 4];
+  const codecs: VideoCodec[] = ['avc', 'hevc'];
+  for (const codec of codecs) {
+    for (const m of mbps) {
+      const bitrate = Math.round(m * 1_000_000 * k * k);
+      const ok = await canEncodeVideo(codec, { width, height, bitrate, frameRate: FPS }).catch(() => false);
+      if (ok) return { codec, bitrate };
+    }
+  }
+  return null;
+}
+
 async function exportVideo(o: ExportOpts): Promise<ExportResult> {
   const k = o.scale;
   const W = o.format.w * k;
@@ -165,15 +186,20 @@ async function exportVideo(o: ExportOpts): Promise<ExportResult> {
   const duration = Math.min(longest, o.maxDuration);
   const total = Math.max(1, Math.round(duration * FPS));
 
-  const videoCodec = await getFirstEncodableVideoCodec(['avc', 'hevc'], { width: W, height: H });
-  if (!videoCodec) throw new Error(`This browser can't encode ${W}×${H} video. Try the 1× size.`);
+  const enc = await pickVideoEncoding(W, H, k);
+  if (!enc) {
+    throw new Error(
+      k > 1
+        ? `This device can't encode ${W}×${H} video. Switch Size to Standard and try again.`
+        : `This device can't encode ${W}×${H} video.`,
+    );
+  }
 
   const { c, ctx } = makeCanvas(W, H);
   const output = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() });
   const videoSource = new CanvasSource(c, {
-    codec: videoCodec,
-    // ~16 Mbps at 1080×1920 — well above what Instagram keeps, so their re-encode starts from a clean master.
-    bitrate: Math.round(16_000_000 * k * k),
+    codec: enc.codec,
+    bitrate: enc.bitrate,
     keyFrameInterval: 2,
   });
   output.addVideoTrack(videoSource, { frameRate: FPS });
