@@ -1,10 +1,12 @@
 :root {
   --bg: #09090b;
   --panel: #161618;
-  --line: #2a2a2e;
+  --line: #3f3f46;
   --text: #f4f4f5;
-  --muted: #9a9aa2;
-  --accent: #2b7bff;
+  --muted: #b4b4bc;
+  --accent: #1f6feb; /* white text on it is 4.6:1 (WCAG AA) */
+  --disabled-bg: #232326;
+  --disabled-text: #8b8b94; /* 4.6:1 on --disabled-bg */
   --danger: #ff5a5f;
   color-scheme: dark;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif;
@@ -14,6 +16,8 @@
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; height: 100%; background: var(--bg); color: var(--text); overscroll-behavior: none; }
 button { font: inherit; color: inherit; }
+/* White, so keyboard focus never looks like the blue selection border. */
+:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 
 .screen {
   /* position:fixed fills the whole screen in iOS standalone mode, where 100dvh comes up short */
@@ -30,12 +34,6 @@ button { font: inherit; color: inherit; }
   padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
     max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
 }
-.ghost {
-  width: 36px; height: 36px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: 0; border-radius: 8px; background: transparent; color: #a1a1aa; cursor: pointer;
-}
-.ghost:hover { background: #18181b; color: #fafafa; }
 .pick-title {
   width: 100%;
   max-width: 440px;
@@ -71,7 +69,7 @@ button { font: inherit; color: inherit; }
   cursor: pointer;
   transition: background 0.15s, color 0.15s, opacity 0.15s;
 }
-.start-btn:disabled { background: #18181b; color: #52525b; cursor: default; opacity: 1; }
+.start-btn:disabled { background: var(--disabled-bg); color: var(--disabled-text); cursor: default; opacity: 1; }
 .option {
   flex: 1;
   min-height: 0;
@@ -83,21 +81,23 @@ button { font: inherit; color: inherit; }
   padding: 16px;
   min-width: 0;
   background: #09090b;
-  border: 1px solid #27272a;
+  border: 1px solid #3f3f46;
   border-radius: 16px;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, transform 0.1s;
 }
-.option:hover { background: #111113; border-color: #3f3f46; }
 .option:active { transform: scale(0.985); }
 .option.on { border-color: var(--accent); background: #0d1526; }
-.option.on .tile { fill: #3f3f46; }
+.option.on .tile { fill: #52525b; }
 .option.on .option-label { color: #fafafa; }
-.option:focus-visible { outline: 2px solid #52525b; outline-offset: 2px; }
 .mini-box { flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; }
 .mini { height: 100%; width: auto; max-width: 100%; display: block; }
-.tile { fill: #27272a; transition: fill 0.15s; }
-.option:hover .tile, .option:active .tile { fill: #3f3f46; }
+.tile { fill: #3f3f46; transition: fill 0.15s; }
+.option:active .tile { fill: #52525b; }
+@media (hover: hover) {
+  .option:hover { background: #111113; border-color: #52525b; }
+  .option:hover .tile { fill: #52525b; }
+}
 .option-label { font-size: 14px; font-weight: 500; color: #a1a1aa; }
 
 /* ---------- top bar ---------- */
@@ -110,10 +110,9 @@ button { font: inherit; color: inherit; }
   min-height: 56px;
 }
 .topbar > span { text-align: center; font-weight: 600; }
-.title small { color: var(--muted); font-weight: 500; margin-left: 4px; }
 .icon {
-  width: 40px; height: 40px; border-radius: 12px; border: 0; background: var(--panel);
-  font-size: 28px; line-height: 1; padding-bottom: 4px; cursor: pointer;
+  width: 44px; height: 44px; border-radius: 12px; border: 0; background: #27272a; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
 }
 
 button.primary, .buttons button, .sheet button, .chip {
@@ -125,10 +124,13 @@ button.primary, .buttons button, .sheet button, .chip {
   font-size: 15px;
   cursor: pointer;
   white-space: nowrap;
+  min-height: 44px;
 }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button:disabled { opacity: 0.4; cursor: default; }
-button.primary:disabled { opacity: 1; background: #18181b; border-color: #18181b; color: #52525b; }
+button.primary:disabled {
+  opacity: 1; background: var(--disabled-bg); border-color: var(--disabled-bg); color: var(--disabled-text);
+}
 button.danger { color: var(--danger); }
 button.wide { width: 100%; padding: 13px; }
 
@@ -170,11 +172,11 @@ button.wide { width: 100%; padding: 13px; }
 /* Empty slots: plain tiles with a small gap between them; the gap disappears once a photo fills the slot. */
 .slot.empty { cursor: pointer; background: transparent; }
 .placeholder {
-  position: absolute; inset: 3px; border-radius: 10px; background: #1c1c1e;
+  position: absolute; inset: 3px; border-radius: 10px; background: #2a2a2e;
   transition: background 0.15s; display: flex; flex-direction: column; align-items: center; justify-content: center;
   color: var(--muted); font-size: 13px; gap: 2px;
 }
-.slot.empty:active .placeholder { background: #26262a; }
+.slot.empty:active .placeholder { background: #34343a; }
 .plus { font-size: 30px; line-height: 1; color: var(--text); }
 .badge {
   position: absolute; right: 6px; bottom: 6px; font-size: 11px; padding: 2px 6px; border-radius: 6px;
@@ -200,20 +202,10 @@ button.wide { width: 100%; padding: 13px; }
 .row.end { justify-content: flex-end; }
 .row.end > label { width: auto; }
 .row.end .chips { flex: 0 1 auto; }
-.val { width: 28px; text-align: right; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.chips { display: flex; gap: 8px; overflow-x: auto; flex: 1; padding: 2px; scrollbar-width: none; }
+.chips { display: flex; gap: 8px; overflow-x: auto; flex: 1; padding: 4px; scrollbar-width: none; } /* room for focus rings */
 .chips::-webkit-scrollbar { display: none; }
 .chip { padding: 8px 12px; font-size: 14px; border-radius: 10px; }
 .chip.on { background: var(--text); color: #111; border-color: var(--text); }
-.swatch {
-  width: 32px; height: 32px; flex: none; border-radius: 50%; border: 2px solid var(--line); cursor: pointer; padding: 0;
-}
-.swatch.on { outline: 2px solid var(--accent); outline-offset: 2px; }
-.swatch.custom {
-  position: relative; overflow: hidden;
-  background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red);
-}
-.swatch.custom input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
 .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 .hint { margin: 0; color: var(--muted); font-size: 12px; text-align: center; }
 
@@ -255,8 +247,8 @@ button.wide { width: 100%; padding: 13px; }
   cursor: default;
 }
 .slot-actions button {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -274,3 +266,26 @@ html[data-standalone] .start { padding-bottom: 32px; }
 html[data-standalone] .editor { padding-bottom: 0; }
 html[data-standalone] .panel { margin-bottom: 0; padding-bottom: 20px; }
 html, body { transition: background-color 0.2s; }
+
+/* Short landscape screens (phone on its side): put the panel beside the frame instead of under it,
+   otherwise the top bar and panel leave the frame a sliver of height. */
+@media (orientation: landscape) and (max-height: 540px) {
+  .editor {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 40%);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .editor .topbar { grid-column: 1 / -1; min-height: 52px; padding: 4px 12px; }
+  .editor .stage-wrap { grid-column: 1; grid-row: 2; padding: 4px 16px 12px; }
+  .editor .panel {
+    grid-column: 2; grid-row: 2; max-height: none; margin: 0;
+    /* same trick as portrait: reach into .screen's bottom safe-area padding instead of adding it twice */
+    margin-bottom: calc(-1 * env(safe-area-inset-bottom));
+    border-top: 0; border-left: 1px solid var(--line); border-radius: 18px 0 0 0;
+  }
+  .pick { flex-direction: row; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
