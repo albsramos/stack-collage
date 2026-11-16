@@ -81,6 +81,8 @@ export default function App() {
   // Which clip's sound to use: a media id (so the choice follows the clip when slots are reordered), 'auto', or off.
   const [audioFrom, setAudioFrom] = useState<string | 'auto' | null>('auto');
   const [selected, setSelected] = useState<number | null>(null);
+  const [choosing, setChoosing] = useState(false);
+  const [exportedOnce, setExportedOnce] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
   const [busy, setBusy] = useState<{ progress: number; label: string } | null>(null);
   const [result, setResult] = useState<(ExportResult & { url: string }) | null>(null);
@@ -368,7 +370,10 @@ export default function App() {
         ? `Shorter clips loop to match the longest (max ${MAX_DURATION}s).`
         : null;
 
-  const doExport = async () => {
+  const doExport = async (scale: 1 | 2) => {
+    setChoosing(false);
+    setScale(scale);
+    setExportedOnce(true);
     setSelected(null);
     const ac = new AbortController();
     abortRef.current = ac;
@@ -476,7 +481,7 @@ export default function App() {
     </div>
   );
 
-  const overlayOpen = !!busy || !!result;
+  const overlayOpen = !!busy || !!result || choosing;
 
   return (
     <div className="screen editor">
@@ -489,7 +494,7 @@ export default function App() {
         <span className="title">
           {FORMATS[formatId].label}
         </span>
-        <button className="primary" disabled={!filled || !!busy} onClick={doExport}>
+        <button className="primary" disabled={!filled || !!busy} onClick={() => setChoosing(true)}>
           Export
         </button>
       </div>
@@ -517,27 +522,17 @@ export default function App() {
         onNudge={nudge}
         onMove={moveSlot}
         onRemove={removeSlot}
+        onReplace={(i) => openPicker(i)}
       />
 
       {/* Fixed height in both modes (two 48px slots), so the frame above never resizes as controls come and go. */}
       <div className="panel">
         {sel && selected !== null ? (
           <div className="tools" key="edit">
-            <div className="slot-a">
-              <div className="nudge" role="group" aria-label="Position">
-                <button aria-label="Move picture left" onClick={() => nudge(selected, -0.1, 0)}>
-                  <Icon d={ICON_LEFT} />
-                </button>
-                <button aria-label="Move picture up" onClick={() => nudge(selected, 0, -0.1)}>
-                  <Icon d={ICON_UP} />
-                </button>
-                <button aria-label="Move picture down" onClick={() => nudge(selected, 0, 0.1)}>
-                  <Icon d={ICON_DOWN} />
-                </button>
-                <button aria-label="Move picture right" onClick={() => nudge(selected, 0.1, 0)}>
-                  <Icon d={ICON_RIGHT} />
-                </button>
-              </div>
+            <div className="slot-a zoom-row">
+              <button className="icon-btn" aria-label="Zoom out" onClick={() => nudge(selected, 0, 0, 1 / 1.15)}>
+                <Icon d={ICON_ZOOM_OUT} />
+              </button>
               <label htmlFor="zoom" className="visually-hidden">
                 Zoom
               </label>
@@ -550,11 +545,33 @@ export default function App() {
                 value={sel.t.zoom}
                 onChange={(e) => setT(selected, { ...sel.t, zoom: +e.target.value })}
               />
+              <button className="icon-btn" aria-label="Zoom in" onClick={() => nudge(selected, 0, 0, 1.15)}>
+                <Icon d={ICON_ZOOM_IN} />
+              </button>
             </div>
-            <div className="slot-b buttons">
-              <button onClick={() => openPicker(selected)}>Replace</button>
-              <button onClick={() => setT(selected, { ...IDENTITY })}>Reset</button>
-              <button className="primary" onClick={deselect}>
+            <div className="slot-b">
+              {/* Pans the picture inside its slot: the no-drag alternative (WCAG 2.5.7). */}
+              <div className="seg move" role="group" aria-label="Move picture inside its slot">
+                <span className="seg-label" aria-hidden="true">
+                  Move
+                </span>
+                <button aria-label="Move picture left" onClick={() => nudge(selected, -0.1, 0)}>
+                  <Icon d={ICON_CHEV_LEFT} />
+                </button>
+                <button aria-label="Move picture up" onClick={() => nudge(selected, 0, -0.1)}>
+                  <Icon d={ICON_CHEV_UP} />
+                </button>
+                <button aria-label="Move picture down" onClick={() => nudge(selected, 0, 0.1)}>
+                  <Icon d={ICON_CHEV_DOWN} />
+                </button>
+                <button aria-label="Move picture right" onClick={() => nudge(selected, 0.1, 0)}>
+                  <Icon d={ICON_CHEV_RIGHT} />
+                </button>
+              </div>
+              <button className="icon-btn" aria-label="Reset position and zoom" onClick={() => setT(selected, { ...IDENTITY })}>
+                <Icon d={ICON_RESET} />
+              </button>
+              <button className="primary done" onClick={deselect}>
                 Done
               </button>
             </div>
@@ -566,16 +583,16 @@ export default function App() {
         ) : (
           <div className="tools" key="main">
             <div className="slot-a">
-              <div className="seg" role="group" aria-label="Export size">
-                <button className={scale === 1 ? 'on' : ''} aria-pressed={scale === 1} aria-label="Standard size" onClick={() => setScale(1)}>
-                  1×
-                </button>
-                <button className={scale === 2 ? 'on' : ''} aria-pressed={scale === 2} aria-label="High size, 2×" onClick={() => setScale(2)}>
-                  2×
-                </button>
-              </div>
+              {!anyVideo && (
+                <p className="hint" key={hint ?? 'intro'}>
+                  {active.some((s) => s.media) ? hint : 'Tap a slot to add a photo or video, or add several at once.'}
+                </p>
+              )}
               {anyVideo && (
                 <div className="seg pop-group" role="group" aria-label="Export sound">
+                  <span className="seg-label" aria-hidden="true">
+                    Sound
+                  </span>
                   <button
                     className={resolvedAudio === null ? 'on' : ''}
                     aria-pressed={resolvedAudio === null}
@@ -634,6 +651,7 @@ export default function App() {
                   </span>
                 </button>
               ) : (
+                anyVideo &&
                 hint && (
                   <p className="hint" key={hint}>
                     {hint}
@@ -653,6 +671,31 @@ export default function App() {
         onChange={(e) => onFiles(e.target.files)}
       />
       </div>
+
+      {choosing && (
+        <Dialog
+          label="Export size"
+          className="choose"
+          onEscape={() => setChoosing(false)}
+          returnFocus={() => document.querySelector<HTMLElement>('.topbar .primary')}
+        >
+          <p className="sheet-title">Export size</p>
+          {([1, 2] as const).map((k) => (
+            <button key={k} className={exportedOnce && k === scale ? 'size-option last' : 'size-option'} onClick={() => doExport(k)}>
+              <span className="size-name">
+                {k === 1 ? 'Standard' : 'High quality'}
+                {exportedOnce && k === scale && <span className="size-tag">Last used</span>}
+              </span>
+              <span className="size-meta">
+                {format.w * k}×{format.h * k} · {k === 1 ? 'right for Instagram and most apps' : 'sharper, about 2× the file size'}
+              </span>
+            </button>
+          ))}
+          <button className="wide" onClick={() => setChoosing(false)}>
+            Cancel
+          </button>
+        </Dialog>
+      )}
 
       {busy && (
         <Dialog
@@ -816,6 +859,7 @@ interface StageProps {
   onNudge: (i: number, dx: number, dy: number, dz?: number) => void;
   onMove: (i: number, dir: -1 | 1) => void;
   onRemove: (i: number) => void;
+  onReplace: (i: number) => void;
   playing: boolean;
   /** Index of the slot whose sound plays in the preview, if any. */
   soundFrom: number | null;
@@ -868,6 +912,7 @@ function Stage(p: StageProps) {
               onUp={i > 0 ? () => p.onMove(i, -1) : undefined}
               onDown={i < n - 1 ? () => p.onMove(i, 1) : undefined}
               onRemove={() => p.onRemove(i)}
+              onReplace={() => p.onReplace(i)}
             />
           ))}
       </div>
@@ -894,6 +939,7 @@ interface SlotViewProps {
   onUp?: () => void;
   onDown?: () => void;
   onRemove: () => void;
+  onReplace: () => void;
 }
 
 const Icon = ({ d, size = 18 }: { d: string; size?: number }) => (
@@ -910,6 +956,14 @@ const ICON_PLAY = 'M7 4.5l12 7.5-12 7.5z';
 const ICON_PAUSE = 'M8 5v14M16 5v14';
 const ICON_MUTED = 'M11 5L6 9H3v6h3l5 4zM22 9l-6 6M16 9l6 6';
 const ICON_HEADPHONES = 'M3 18v-6a9 9 0 0118 0v6M21 19a2 2 0 01-2 2h-1v-6h3zM3 19a2 2 0 002 2h1v-6H3z';
+const ICON_CHEV_LEFT = 'M15 6l-6 6 6 6';
+const ICON_CHEV_RIGHT = 'M9 6l6 6-6 6';
+const ICON_CHEV_UP = 'M6 15l6-6 6 6';
+const ICON_CHEV_DOWN = 'M6 9l6 6 6-6';
+const ICON_ZOOM_IN = 'M11 4a7 7 0 100 14 7 7 0 000-14zM20 20l-4-4M8 11h6M11 8v6';
+const ICON_ZOOM_OUT = 'M11 4a7 7 0 100 14 7 7 0 000-14zM20 20l-4-4M8 11h6';
+const ICON_RESET = 'M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8M3 3v5h5';
+const ICON_REPLACE = 'M16 3l4 4-4 4M20 7H8a4 4 0 00-4 4M8 21l-4-4 4-4M4 17h12a4 4 0 004-4';
 const ICON_TRASH = 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6';
 
 function slotLabel(index: number, count: number, m: SlotState['media'], selected: boolean) {
@@ -921,7 +975,7 @@ function slotLabel(index: number, count: number, m: SlotState['media'], selected
 
 function SlotView(props: SlotViewProps) {
   const { index, count, rect, s, radius, slot, selected, onTap, onTransform, onNudge, onDeselect, onGestureStart } = props;
-  const { onUp, onDown, onRemove, playing, sound, onPlayBlocked } = props;
+  const { onUp, onDown, onRemove, onReplace, playing, sound, onPlayBlocked } = props;
   const onPlayBlockedRef = useRef(onPlayBlocked);
   onPlayBlockedRef.current = onPlayBlocked;
   const m = slot.media;
@@ -1130,6 +1184,9 @@ function SlotView(props: SlotViewProps) {
               <Icon d={ICON_DOWN} />
             </button>
           )}
+          <button aria-label={`Replace slot ${index + 1}`} onClick={onReplace}>
+            <Icon d={ICON_REPLACE} />
+          </button>
           <button aria-label={`Remove slot ${index + 1}`} className="danger" onClick={onRemove}>
             <Icon d={ICON_TRASH} />
           </button>
