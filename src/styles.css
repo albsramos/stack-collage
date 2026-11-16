@@ -232,7 +232,8 @@ button.wide { width: 100%; padding: 13px; min-height: 46px; }
   width: 32px; height: 32px; border-radius: 999px; display: grid; place-items: center; font-size: 20px; line-height: 1;
   color: var(--text); background: var(--surface); box-shadow: var(--shadow-sm);
 }
-.placeholder .slot-num { font: 500 11px/1 var(--mono); color: var(--faint); }
+/* The + sits dead centre in the slot; the number hangs just below it instead of pushing it up. */
+.placeholder > .slot-num { position: absolute; top: calc(50% + 24px); font: 500 11px/1 var(--mono); color: var(--faint); }
 .badge {
   position: absolute; right: 6px; bottom: 6px; font: 500 11px/1 var(--mono); padding: 4px 6px; border-radius: 6px; color: #fff;
   background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); pointer-events: none;

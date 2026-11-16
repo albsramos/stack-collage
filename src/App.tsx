@@ -1367,7 +1367,9 @@ function SlotView(props: SlotViewProps) {
       {!m && (
         <div className="placeholder" aria-hidden="true">
           <DitherField />
-          <span className="plus">+</span>
+          <span className="plus">
+            <Icon d="M12 5v14M5 12h14" size={16} />
+          </span>
           <span className="slot-num">{String(index + 1).padStart(2, '0')}</span>
         </div>
       )}
