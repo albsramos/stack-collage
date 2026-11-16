@@ -18,8 +18,23 @@ import type { ExportResult, SlotState } from './exporter';
 import { Orb } from './Orb';
 import { DitherField, LookPreview, snapshot } from './Previews';
 
-// The exporter pulls in mediabunny (~200 KB gzipped). Load it when it's first needed, not on startup.
-const loadExporter = () => import('./exporter');
+// The exporter pulls in mediabunny (~200 KB gzipped). It's kept out of the startup bundle, but fetched in the
+// background soon after the app opens (see warmExporter) rather than at the moment of export: once a new version is
+// deployed, the service worker takes over this page and deletes the old files, so an exporter fetched only on the
+// first tap of Export would 404 ("Importing a module script failed"). Fetched early, it's already in memory.
+let exporter: Promise<typeof import('./exporter')> | null = null;
+const loadExporter = () =>
+  (exporter ??= import('./exporter').catch((e) => {
+    exporter = null; // let a later call try again
+    console.error(e);
+    throw new Error(STALE_APP);
+  }));
+const STALE_APP = 'Stack was updated in the background and needs a reload to export. Sorry!';
+const warmExporter = () => {
+  const go = () => void loadExporter().catch(() => {});
+  if ('requestIdleCallback' in window) requestIdleCallback(go, { timeout: 3000 });
+  else setTimeout(go, 1500);
+};
 const hasVideo = (slots: SlotState[]) => slots.some((s) => s.media?.kind === 'video');
 
 type Step = 'start' | 'editor';
@@ -102,6 +117,8 @@ export default function App() {
   const installed = useMemo(() => document.documentElement.dataset.standalone !== undefined, []);
   // Chrome and Edge offer their own install prompt: keep it, so the guide can offer a one-tap Install.
   const [installPrompt, setInstallPrompt] = useState<(Event & { prompt: () => Promise<void> }) | null>(null);
+  useEffect(warmExporter, []);
+
   useEffect(() => {
     const onPrompt = (e: Event) => {
       e.preventDefault();
@@ -455,7 +472,9 @@ export default function App() {
     } catch (e) {
       if ((e as DOMException).name !== 'AbortError') {
         console.error(e);
-        showError(`Export failed: ${(e as Error).message}`);
+        const msg = (e as Error).message;
+        if (msg === STALE_APP) showToast({ msg, error: true, action: { label: 'Reload', run: () => location.reload() } });
+        else showError(`Export failed: ${msg}`);
       }
     } finally {
       setBusy(null);
