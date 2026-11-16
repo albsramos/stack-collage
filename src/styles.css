@@ -309,8 +309,18 @@ button.wide { width: 100%; padding: 13px; min-height: 46px; }
 @keyframes done-pulse { 0% { transform: scale(0.6); } 45% { transform: scale(1.35); } 100% { transform: scale(1); } }
 .install { gap: 14px; padding: 24px 20px 20px; }
 .install-sub { max-width: 30ch; line-height: 1.45; margin-top: -6px !important; }
-.install-seg { width: 100%; }
-.install-seg button { flex: 1 1 0; }
+/* Two plain text tabs; a blue line slides under the chosen one. */
+.tabs { position: relative; width: 100%; display: grid; grid-template-columns: 1fr 1fr; box-shadow: inset 0 -1px 0 var(--line); }
+.sheet .tabs button {
+  min-height: 40px; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none;
+  font-size: 14px; font-weight: 500; color: var(--muted); transition: color 0.2s;
+}
+.sheet .tabs button.on { color: var(--text); font-weight: 600; }
+.sheet .tabs button:not(:disabled):active { transform: none; opacity: 0.7; }
+.tabs-line {
+  position: absolute; left: 0; bottom: 0; width: 50%; height: 2px; border-radius: 2px; background: var(--accent);
+  transition: transform 0.3s var(--ease-out); pointer-events: none;
+}
 .install-steps {
   list-style: none; margin: 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: 8px; text-align: left;
   counter-reset: step; animation: swap 0.25s var(--ease-out);

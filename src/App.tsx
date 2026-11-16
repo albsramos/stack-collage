@@ -944,19 +944,26 @@ function MiniLayout({ count, formatId }: { count: Count; formatId: FormatId }) {
 function InstallGuide({ onClose, onInstall }: { onClose: () => void; onInstall?: () => void }) {
   const ua = navigator.userAgent;
   const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const [tab, setTab] = useState<'ios' | 'android'>(ios || !/Android/.test(ua) ? 'ios' : 'android');
+  // Chrome on iPhone says CriOS; anywhere other than an iPhone, Chrome is the one that matters.
+  const [browser, setBrowser] = useState<'safari' | 'chrome'>(ios && !/CriOS/.test(ua) ? 'safari' : 'chrome');
   const steps =
-    tab === 'ios'
+    browser === 'safari'
       ? [
-          { icon: ICON_SHARE, text: <>Open this page in Safari and tap <b>Share</b></> },
+          { icon: ICON_SHARE, text: <>Tap <b>Share</b> in the toolbar</> },
           { icon: ICON_PLUS_SQUARE, text: <>Scroll down and tap <b>Add to Home Screen</b></> },
           { icon: ICON_INSTALL, text: <>Tap <b>Add</b>. Stack is now on your Home Screen</> },
         ]
-      : [
-          { icon: ICON_MENU_DOTS, text: <>In Chrome, tap the <b>⋮</b> menu</> },
-          { icon: ICON_PLUS_SQUARE, text: <>Tap <b>Install app</b> or <b>Add to Home screen</b></> },
-          { icon: ICON_INSTALL, text: <>Tap <b>Install</b>. Stack is now with your apps</> },
-        ];
+      : ios
+        ? [
+            { icon: ICON_SHARE, text: <>Tap <b>Share</b> in the address bar, top right</> },
+            { icon: ICON_PLUS_SQUARE, text: <>Scroll down and tap <b>Add to Home Screen</b></> },
+            { icon: ICON_INSTALL, text: <>Tap <b>Add</b>. Stack is now on your Home Screen</> },
+          ]
+        : [
+            { icon: ICON_MENU_DOTS, text: <>Tap the <b>⋮</b> menu</> },
+            { icon: ICON_PLUS_SQUARE, text: <>Tap <b>Install app</b> or <b>Add to Home screen</b></> },
+            { icon: ICON_INSTALL, text: <>Tap <b>Install</b>. Stack is now with your apps</> },
+          ];
   return (
     <Dialog label="Use Stack as an app" className="install" onEscape={onClose}>
       <Orb size={56} grid={24} />
@@ -970,15 +977,15 @@ function InstallGuide({ onClose, onInstall }: { onClose: () => void; onInstall?:
         </button>
       ) : (
         <>
-          <div className="seg install-seg" role="group" aria-label="Phone">
-            <button className={tab === 'ios' ? 'on' : ''} aria-pressed={tab === 'ios'} onClick={() => setTab('ios')}>
-              iPhone
-            </button>
-            <button className={tab === 'android' ? 'on' : ''} aria-pressed={tab === 'android'} onClick={() => setTab('android')}>
-              Android
-            </button>
+          <div className="tabs" role="group" aria-label="Browser">
+            {(['safari', 'chrome'] as const).map((b) => (
+              <button key={b} className={browser === b ? 'on' : ''} aria-pressed={browser === b} onClick={() => setBrowser(b)}>
+                {b === 'safari' ? 'Safari' : 'Chrome'}
+              </button>
+            ))}
+            <span className="tabs-line" style={{ transform: `translateX(${browser === 'safari' ? 0 : 100}%)` }} aria-hidden="true" />
           </div>
-          <ol className="install-steps" key={tab}>
+          <ol className="install-steps" key={browser}>
             {steps.map((st, i) => (
               <li key={i}>
                 <span className="step-icon" aria-hidden="true">
