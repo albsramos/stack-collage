@@ -12,8 +12,10 @@ export interface OrbFrame {
   aim?: number | null;
   /** 0–1: the dots fly in from scattered positions and settle into the sphere (an intro). 1 = settled. */
   assemble?: number;
-  /** How far the light has travelled round while spinning (radians). Default: steady from `t`. */
-  phase?: number;
+  /** The light's direction (screen angle), when the caller animates it itself. Overrides spin and aim. */
+  light?: number;
+  /** Clock for the dust's twinkle. Default: from `t` and `spin`. Pass an accumulated one if spin changes. */
+  twinkle?: number;
   /** How far the dust has orbited (radians). Default: steady from `t`, while spinning. */
   orbit?: number;
   /** 0–1: the dust is flung outwards (a reaction), then falls back. */
@@ -47,7 +49,7 @@ export function orbDots(grid: number, f: OrbFrame, dust = 1): Dot[] {
   // The light sits up and to the right. At rest it sways a little; busy, it travels all the way round.
   const base = -Math.PI / 4;
   const rest = f.aim ?? base + Math.sin(f.t * 0.6) * 0.18;
-  const theta = rest * (1 - f.spin) + (base + (f.phase ?? f.t * 2.2)) * f.spin;
+  const theta = f.light ?? rest * (1 - f.spin) + (base + f.t * 2.2) * f.spin;
   const lx = Math.cos(theta) * 0.62;
   const ly = Math.sin(theta) * 0.62;
   const lz = 0.48;
@@ -90,7 +92,7 @@ export function orbDots(grid: number, f: OrbFrame, dust = 1): Dot[] {
     const d = (1.06 + h2 * h2 * 0.4) * (1 + (f.burst ?? 0) * (0.3 + h3 * 0.6)); // most sit close to the rim
     const a = a0 + (f.orbit ?? f.t * 1.6 * f.spin) / d;
     // Busy, the far specks fade in and out as they travel so the ring never looks solid.
-    const tick = Math.floor(f.t * (2 + f.spin * 4) + h3 * 10);
+    const tick = Math.floor((f.twinkle ?? f.t * (2 + f.spin * 4)) + h3 * 10);
     if (hash(k, tick) < 0.18 + f.spin * 0.2) continue;
     add(Math.floor(cx + Math.cos(a) * d * R), Math.floor(cy + Math.sin(a) * d * R));
   }

@@ -98,6 +98,26 @@ export default function App() {
     orbAim.current = Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2));
   };
   const [justDone, setJustDone] = useState(0);
+  const [installOpen, setInstallOpen] = useState(false);
+  const installed = useMemo(() => document.documentElement.dataset.standalone !== undefined, []);
+  // Chrome and Edge offer their own install prompt: keep it, so the guide can offer a one-tap Install.
+  const [installPrompt, setInstallPrompt] = useState<(Event & { prompt: () => Promise<void> }) | null>(null);
+  useEffect(() => {
+    const onPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e as Event & { prompt: () => Promise<void> });
+    };
+    const onInstalled = () => {
+      setInstallPrompt(null);
+      setInstallOpen(false);
+    };
+    window.addEventListener('beforeinstallprompt', onPrompt);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onPrompt);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
   const [exportedOnce, setExportedOnce] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
   const [busy, setBusy] = useState<{ progress: number; label: string } | null>(null);
@@ -462,11 +482,18 @@ export default function App() {
         onPointerDown={aimAt}
         onPointerLeave={() => (orbAim.current = null)}
       >
-        <header className="brand">
+        <header className="brand" inert={installOpen}>
           <span>Stack</span>
-          <span className="brand-meta">ON-DEVICE</span>
+          {installed ? (
+            <span className="brand-meta">ON-DEVICE</span>
+          ) : (
+            <button className="install-link" onClick={() => setInstallOpen(true)}>
+              <Icon d={ICON_INSTALL} size={14} />
+              Use as an app
+            </button>
+          )}
         </header>
-        <div className="pick-head">
+        <div className="pick-head" inert={installOpen}>
           <div>
             <h1 className="pick-title">Pick a template</h1>
             <p className="pick-sub">Stack photos or videos into one frame.</p>
@@ -475,7 +502,7 @@ export default function App() {
             <Orb size={72} grid={30} intro aim={orbAim} kick={orbKick} />
           </div>
         </div>
-        <main className="pick">
+        <main className="pick" inert={installOpen}>
           <div className="pick-row" role="group" aria-label="Number of cards">
             {([2, 3] as Count[]).map((c) => (
               <button
@@ -509,9 +536,22 @@ export default function App() {
             ))}
           </div>
         </main>
-        <button className="start-btn" disabled={!pickCount || !pickFormat} onClick={start}>
+        <button className="start-btn" disabled={!pickCount || !pickFormat} onClick={start} inert={installOpen}>
           Start
         </button>
+        {installOpen && (
+          <InstallGuide
+            onClose={() => setInstallOpen(false)}
+            onInstall={
+              installPrompt
+                ? () => {
+                    installPrompt.prompt().catch(() => {});
+                    setInstallPrompt(null);
+                  }
+                : undefined
+            }
+          />
+        )}
       </div>
     );
   }
@@ -899,6 +939,64 @@ function MiniLayout({ count, formatId }: { count: Count; formatId: FormatId }) {
   );
 }
 
+// ---------- Install guide: how to put Stack on the Home Screen ----------
+
+function InstallGuide({ onClose, onInstall }: { onClose: () => void; onInstall?: () => void }) {
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const [tab, setTab] = useState<'ios' | 'android'>(ios || !/Android/.test(ua) ? 'ios' : 'android');
+  const steps =
+    tab === 'ios'
+      ? [
+          { icon: ICON_SHARE, text: <>Open this page in Safari and tap <b>Share</b></> },
+          { icon: ICON_PLUS_SQUARE, text: <>Scroll down and tap <b>Add to Home Screen</b></> },
+          { icon: ICON_INSTALL, text: <>Tap <b>Add</b>. Stack is now on your Home Screen</> },
+        ]
+      : [
+          { icon: ICON_MENU_DOTS, text: <>In Chrome, tap the <b>⋮</b> menu</> },
+          { icon: ICON_PLUS_SQUARE, text: <>Tap <b>Install app</b> or <b>Add to Home screen</b></> },
+          { icon: ICON_INSTALL, text: <>Tap <b>Install</b>. Stack is now with your apps</> },
+        ];
+  return (
+    <Dialog label="Use Stack as an app" className="install" onEscape={onClose}>
+      <Orb size={56} grid={24} />
+      <p className="sheet-title">Use Stack as an app</p>
+      <p className="muted install-sub">
+        Add it to your Home Screen. It opens full screen, works offline, and your photos never leave the phone.
+      </p>
+      {onInstall ? (
+        <button className="primary wide" onClick={onInstall}>
+          Install Stack
+        </button>
+      ) : (
+        <>
+          <div className="seg install-seg" role="group" aria-label="Phone">
+            <button className={tab === 'ios' ? 'on' : ''} aria-pressed={tab === 'ios'} onClick={() => setTab('ios')}>
+              iPhone
+            </button>
+            <button className={tab === 'android' ? 'on' : ''} aria-pressed={tab === 'android'} onClick={() => setTab('android')}>
+              Android
+            </button>
+          </div>
+          <ol className="install-steps" key={tab}>
+            {steps.map((st, i) => (
+              <li key={i}>
+                <span className="step-icon" aria-hidden="true">
+                  <Icon d={st.icon} size={16} />
+                </span>
+                <span>{st.text}</span>
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
+      <button className="wide" onClick={onClose}>
+        Done
+      </button>
+    </Dialog>
+  );
+}
+
 // ---------- Dialog: focus moves in, background is inert (set by the caller), Escape closes ----------
 
 function Dialog(props: {
@@ -1048,6 +1146,10 @@ const Icon = ({ d, size = 18 }: { d: string; size?: number }) => (
     <path d={d} />
   </svg>
 );
+const ICON_INSTALL = 'M12 3v12M7 10l5 5 5-5M5 21h14';
+const ICON_SHARE = 'M12 3v13M7 8l5-5 5 5M5 12v8h14v-8';
+const ICON_PLUS_SQUARE = 'M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2zM12 8v8M8 12h8';
+const ICON_MENU_DOTS = 'M12 5h.01M12 12h.01M12 19h.01';
 const ICON_BACK = 'M15 18l-6-6 6-6';
 const ICON_UP = 'M12 19V5M5 12l7-7 7 7';
 const ICON_DOWN = 'M12 5v14M19 12l-7 7-7-7';

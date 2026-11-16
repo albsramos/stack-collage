@@ -24,13 +24,18 @@ export function Orb({ size, grid = 32, busy = false, progress = null, className,
   const ref = useRef<HTMLCanvasElement>(null);
   const reaction = useRef<Reaction | null>(null);
   const lastKind = useRef<Reaction['kind'] | null>(null);
+  const lastKickAt = useRef(0);
   const target = useRef({ spin: busy ? 1 : 0, fill: progress ?? 0 });
   target.current = { spin: busy ? 1 : 0, fill: progress ?? 0 };
   const aimRef = useRef(aim);
   aimRef.current = aim;
   useEffect(() => {
     if (!kick) return;
-    reaction.current = pickReaction(lastKind.current);
+    // Tapping fast: pick only the reactions that blend well, and make each a little gentler.
+    const now = performance.now();
+    const rapid = now - lastKickAt.current < 400;
+    lastKickAt.current = now;
+    reaction.current = pickReaction(lastKind.current, rapid);
     lastKind.current = reaction.current.kind;
   }, [kick]);
 
@@ -50,58 +55,57 @@ export function Orb({ size, grid = 32, busy = false, progress = null, className,
     };
     scheme.addEventListener('change', recolor);
 
-    // Spin and fill ease toward their targets, so going busy (or finishing) is a glide, not a jump.
-    const cur: Omit<OrbFrame, 't'> = { ...target.current, assemble: intro && !reduce.matches ? 0 : 1 };
-    // The aim is smoothed as a vector, so the light swings the short way round.
-    let ax = Math.cos(-Math.PI / 4);
-    let ay = Math.sin(-Math.PI / 4);
-    let aiming = false;
-    let phase = 0; // the light's travel while spinning, and the dust's: accumulated, so direction can change
+    // Everything is integrated, never set: the light has one angle and one speed, both eased, so reactions that
+    // arrive mid-way (someone tapping fast) blend into each other instead of jumping.
+    const BASE = -Math.PI / 4;
+    const cur = { spin: target.current.spin, fill: target.current.fill, assemble: intro && !reduce.matches ? 0 : 1 };
+    let angle = BASE;
+    let vel = 0; // rad/s
     let orbit = 0;
+    let twinkle = 0;
     let burst = 0;
     const t0 = performance.now();
     let last = t0;
     let raf = 0;
     let visible = true;
+    const ease = (rate: number, dt: number) => 1 - Math.exp(-dt * rate);
+    const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
     const frame = (now: number) => {
-      const dt = Math.min(0.1, (now - last) / 1000);
+      const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      const k = 1 - Math.exp(-dt * 4);
-      // A reaction runs for its own length, then everything eases back to where the props say.
+      const t = (now - t0) / 1000;
       let re = reaction.current;
-      if (re && re.start === 0) {
-        re.start = now;
-        if (re.kind === 'reform') cur.assemble = Math.min(cur.assemble!, re.amount);
-        if (re.kind === 'burst') burst = re.amount;
-      }
+      if (re && re.start === 0) re.start = now;
       if (re && now - re.start > re.ms) re = reaction.current = null;
+      const age = re ? now - re.start : 0;
+      const busyNow = target.current.spin > 0;
       const spinning = re?.kind === 'spin';
-      const spinTo = spinning ? 1 : target.current.spin;
-      cur.spin += (spinTo - cur.spin) * (spinning ? 1 - Math.exp(-dt * 12) : k);
-      const dir = spinning ? re!.dir : 1;
-      const speed = spinning ? re!.speed : 1;
-      phase += dt * 2.2 * dir * speed;
-      orbit += dt * 1.6 * dir * speed * cur.spin;
-      cur.phase = phase;
-      cur.orbit = orbit;
-      burst *= Math.exp(-dt * 3.5);
-      cur.burst = burst;
-      if (cur.assemble! < 1) cur.assemble = Math.min(1, cur.assemble! + dt / (re?.kind === 'reform' ? 0.7 : 1.4));
-      const flick = re?.kind === 'flick' ? re.angle : null;
-      const want = flick ?? aimRef.current?.current;
-      if (want != null) aiming = true;
-      if (aiming) {
-        const tx = Math.cos(want ?? -Math.PI / 4);
-        const ty = Math.sin(want ?? -Math.PI / 4);
-        const ka = 1 - Math.exp(-dt * 6);
-        ax += (tx - ax) * ka;
-        ay += (ty - ay) * ka;
-        cur.aim = Math.atan2(ay, ax);
+
+      // Light: spin by speeding up, otherwise drift back to where it should rest (the finger, a flick, the sway).
+      const velTo = busyNow ? 2.2 : spinning ? 2.2 * re!.dir * re!.speed : 0;
+      vel += (velTo - vel) * ease(6, dt);
+      angle += vel * dt;
+      if (velTo === 0) {
+        const restAt = (re?.kind === 'flick' ? re.angle : null) ?? aimRef.current?.current ?? BASE + Math.sin(t * 0.6) * 0.18;
+        angle += wrap(restAt - angle) * ease(re?.kind === 'flick' ? 9 : 5, dt);
       }
-      const fillTo = re?.kind === 'pulse' ? Math.max(target.current.fill, re.amount) : target.current.fill;
-      cur.fill += (fillTo - cur.fill) * (1 - Math.exp(-dt * (re?.kind === 'pulse' ? 14 : 8)));
-      drawOrb(ctx, px, grid, color, { t: (now - t0) / 1000, ...cur });
+      cur.spin += ((busyNow || spinning ? 1 : 0) - cur.spin) * ease(6, dt);
+      orbit += vel * dt * 0.73;
+      twinkle += dt * (2 + cur.spin * 4);
+
+      // Burst: the dust swells out over a beat, then settles.
+      if (re?.kind === 'burst' && age < 160) burst += (re.amount - burst) * ease(16, dt);
+      else burst *= Math.exp(-dt * 3.5);
+
+      // Re-form: scatter part way, softly, then pull back together.
+      if (re?.kind === 'reform' && age < 220) cur.assemble += (re.amount - cur.assemble) * ease(9, dt);
+      else if (cur.assemble < 1) cur.assemble = Math.min(1, cur.assemble + dt / (intro && t < 1.5 ? 1.4 : 0.55));
+
+      const fillTo = re?.kind === 'pulse' && age < re.ms * 0.5 ? Math.max(target.current.fill, re.amount) : target.current.fill;
+      cur.fill += (fillTo - cur.fill) * ease(re?.kind === 'pulse' ? 12 : 8, dt);
+
+      drawOrb(ctx, px, grid, color, { t, spin: cur.spin, fill: cur.fill, assemble: cur.assemble, light: angle, orbit, twinkle, burst });
       if (!reduce.matches && visible) raf = requestAnimationFrame(frame);
     };
     const restart = () => {
@@ -167,19 +171,21 @@ const KINDS: Reaction['kind'][] = ['spin', 'flick', 'pulse', 'burst', 'reform'];
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
 /** A random reaction, never the same kind twice in a row, with its own strength, direction and length. */
-function pickReaction(last: Reaction['kind'] | null): Reaction {
-  const options = KINDS.filter((k) => k !== last);
+function pickReaction(last: Reaction['kind'] | null, rapid: boolean): Reaction {
+  // Scattering the whole sphere over and over reads as noise, so rapid taps skip it.
+  const options = KINDS.filter((k) => k !== last && !(rapid && k === 'reform'));
   const kind = options[Math.floor(Math.random() * options.length)];
+  const soft = rapid ? 0.65 : 1;
   const base = { kind, start: 0, dir: (Math.random() < 0.5 ? 1 : -1) as 1 | -1, speed: 1, angle: 0, amount: 0 };
   switch (kind) {
     case 'spin':
-      return { ...base, ms: rand(350, 650), speed: rand(0.9, 1.9) };
+      return { ...base, ms: rand(350, 650), speed: rand(0.9, 1.9) * soft };
     case 'flick':
       return { ...base, ms: rand(380, 650), angle: rand(-Math.PI, Math.PI) };
     case 'pulse':
-      return { ...base, ms: rand(220, 380), amount: rand(0.45, 0.8) };
+      return { ...base, ms: rand(220, 380), amount: rand(0.45, 0.8) * soft };
     case 'burst':
-      return { ...base, ms: 600, amount: rand(0.6, 1) };
+      return { ...base, ms: 600, amount: rand(0.6, 1) * soft };
     case 'reform':
       return { ...base, ms: 700, amount: rand(0.35, 0.6) };
   }
