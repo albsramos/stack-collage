@@ -56,6 +56,15 @@ export default function App() {
   const [result, setResult] = useState<(ExportResult & { url: string }) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  // After an action removes the focused control (Remove, Done, moving to the end), put focus back on the slot
+  // instead of letting it fall to <body>.
+  const focusSlot = useRef<number | null>(null);
+  useEffect(() => {
+    if (focusSlot.current === null) return;
+    document.querySelector<HTMLElement>(`[data-slot="${focusSlot.current}"]`)?.focus();
+    focusSlot.current = null;
+  });
+
   // The strip iOS reserves below a Home Screen app shows the page background: match whatever sits at the bottom.
   useEffect(() => {
     const c = step === 'editor' ? '#161618' : '#09090b';
@@ -206,6 +215,7 @@ export default function App() {
     const removed = slots[i];
     setSlots((prev) => prev.map((s, k) => (k === i ? { media: null, t: { ...IDENTITY } } : s)));
     setSelected(null);
+    focusSlot.current = i;
     undoRef.current = { index: i, slot: removed };
     showToast({ msg: 'Removed', action: { label: 'Undo', run: undoRemove } });
   };
@@ -237,7 +247,24 @@ export default function App() {
       return next;
     });
     setSelected(j);
+    focusSlot.current = j;
   };
+
+  const deselect = () => {
+    if (selected !== null) focusSlot.current = selected;
+    setSelected(null);
+  };
+
+  /** Move the media inside the selected slot without dragging (buttons and arrow keys). */
+  const nudge = (i: number, dx: number, dy: number, dz = 1) =>
+    // Functional update: held-down arrow keys fire faster than React re-renders.
+    setSlots((prev) =>
+      prev.map((s, k) =>
+        k === i
+          ? { ...s, t: { zoom: clamp(s.t.zoom * dz, 1, 5), x: clamp(s.t.x + dx, -1, 1), y: clamp(s.t.y + dy, -1, 1) } }
+          : s,
+      ),
+    );
 
   // ---------- flow ----------
   const start = () => {
@@ -295,7 +322,7 @@ export default function App() {
         },
       });
       setResult({ ...r, url: URL.createObjectURL(r.blob) });
-      if (r.warning) showError(r.warning);
+      // r.warning is shown inside the result dialog: a toast would sit outside it, unreachable behind aria-modal.
     } catch (e) {
       if ((e as DOMException).name !== 'AbortError') {
         console.error(e);
@@ -307,7 +334,9 @@ export default function App() {
     }
   };
 
+  const [saveError, setSaveError] = useState<string | null>(null);
   const closeResult = () => {
+    setSaveError(null);
     if (result) {
       URL.revokeObjectURL(result.url);
       result.release?.().catch(() => {}); // delete the on-disk file behind it
@@ -321,13 +350,12 @@ export default function App() {
       <div className="screen start">
         <h1 className="pick-title">Pick your template</h1>
         <main className="pick">
-          <div className="pick-row">
+          <div className="pick-row" role="group" aria-label="Number of cards">
             {([2, 3] as Count[]).map((c) => (
               <button
                 key={c}
                 className={pickCount === c ? 'option on' : 'option'}
                 onClick={() => setPickCount(c)}
-                aria-label={`${c} stacked`}
                 aria-pressed={pickCount === c}
               >
                 <MiniLayout count={c} formatId={pickFormat ?? 'story'} />
@@ -335,13 +363,12 @@ export default function App() {
               </button>
             ))}
           </div>
-          <div className="pick-row">
+          <div className="pick-row" role="group" aria-label="Format">
             {(Object.keys(FORMATS) as FormatId[]).map((f) => (
               <button
                 key={f}
                 className={pickFormat === f ? 'option on' : 'option'}
                 onClick={() => setPickFormat(f)}
-                aria-label={FORMATS[f].label}
                 aria-pressed={pickFormat === f}
               >
                 <MiniLayout count={pickCount ?? (1 as Count)} formatId={f} />
@@ -359,8 +386,30 @@ export default function App() {
 
   const sel = selected !== null ? slots[selected] : null;
 
+  const toastView = toast && (
+    <div
+      className={toast.error ? 'toast error' : 'toast'}
+      onPointerEnter={() => setToastHeld(true)}
+      onPointerLeave={() => setToastHeld(false)}
+      onFocus={() => setToastHeld(true)}
+      onBlur={() => setToastHeld(false)}
+    >
+      <span>{toast.msg}</span>
+      {toast.action && <button onClick={toast.action.run}>{toast.action.label}</button>}
+      {toast.error && (
+        <button aria-label="Dismiss" onClick={() => setToast(null)}>
+          ×
+        </button>
+      )}
+    </div>
+  );
+
+  const overlayOpen = !!busy || !!result;
+
   return (
     <div className="screen editor">
+      {/* display: contents, so layout is unchanged; inert keeps focus and screen readers inside an open overlay */}
+      <div className="editor-main" inert={overlayOpen}>
       <div className="topbar">
         <button className="icon" onClick={back} aria-label="Back">
           <Icon d={ICON_BACK} size={22} />
@@ -380,8 +429,10 @@ export default function App() {
         bg={bg}
         selected={selected}
         onSelect={(i) => setSelected(i)}
+        onDeselect={deselect}
         onEmptyTap={(i) => openPicker(i)}
         onTransform={setT}
+        onNudge={nudge}
         onMove={moveSlot}
         onRemove={removeSlot}
       />
@@ -390,8 +441,9 @@ export default function App() {
         {sel && selected !== null ? (
           <div className="tools">
             <div className="row">
-              <label>Zoom</label>
+              <label htmlFor="zoom">Zoom</label>
               <input
+                id="zoom"
                 type="range"
                 min={1}
                 max={5}
@@ -400,14 +452,31 @@ export default function App() {
                 onChange={(e) => setT(selected, { ...sel.t, zoom: +e.target.value })}
               />
             </div>
+            <div className="row">
+              <span className="label" id="position-label">Position</span>
+              <div className="nudge" role="group" aria-labelledby="position-label">
+                <button aria-label="Move picture left" onClick={() => nudge(selected, -0.1, 0)}>
+                  <Icon d={ICON_LEFT} />
+                </button>
+                <button aria-label="Move picture up" onClick={() => nudge(selected, 0, -0.1)}>
+                  <Icon d={ICON_UP} />
+                </button>
+                <button aria-label="Move picture down" onClick={() => nudge(selected, 0, 0.1)}>
+                  <Icon d={ICON_DOWN} />
+                </button>
+                <button aria-label="Move picture right" onClick={() => nudge(selected, 0.1, 0)}>
+                  <Icon d={ICON_RIGHT} />
+                </button>
+              </div>
+            </div>
             <div className="buttons">
               <button onClick={() => openPicker(selected)}>Replace</button>
               <button onClick={() => setT(selected, { ...IDENTITY })}>Reset</button>
-              <button className="primary" onClick={() => setSelected(null)}>
+              <button className="primary" onClick={deselect}>
                 Done
               </button>
             </div>
-            <p className="hint">Drag to reposition · pinch to zoom</p>
+            <p className="hint">Drag to reposition · pinch to zoom · arrow keys and +/− work too</p>
           </div>
         ) : (
           <div className="tools">
@@ -422,21 +491,25 @@ export default function App() {
               </p>
             )}
             <div className="row end">
-              <label>Size</label>
-              <div className="chips">
-                <button className={scale === 1 ? 'chip on' : 'chip'} onClick={() => setScale(1)}>
+              <span className="label" id="size-label">Size</span>
+              <div className="chips" role="group" aria-labelledby="size-label">
+                <button className={scale === 1 ? 'chip on' : 'chip'} aria-pressed={scale === 1} onClick={() => setScale(1)}>
                   Standard
                 </button>
-                <button className={scale === 2 ? 'chip on' : 'chip'} onClick={() => setScale(2)}>
+                <button className={scale === 2 ? 'chip on' : 'chip'} aria-pressed={scale === 2} onClick={() => setScale(2)}>
                   High · 2×
                 </button>
               </div>
             </div>
             {anyVideo && (
               <div className="row end">
-                <label>Sound</label>
-                <div className="chips">
-                  <button className={resolvedAudio === null ? 'chip on' : 'chip'} onClick={() => setAudioFrom(null)}>
+                <span className="label" id="sound-label">Sound</span>
+                <div className="chips" role="group" aria-labelledby="sound-label">
+                  <button
+                    className={resolvedAudio === null ? 'chip on' : 'chip'}
+                    aria-pressed={resolvedAudio === null}
+                    onClick={() => setAudioFrom(null)}
+                  >
                     Off
                   </button>
                   {active.map((s, i) =>
@@ -444,6 +517,7 @@ export default function App() {
                       <button
                         key={i}
                         className={resolvedAudio === i ? 'chip on' : 'chip'}
+                        aria-pressed={resolvedAudio === i}
                         onClick={() => setAudioFrom(s.media!.id)}
                       >
                         Video {i + 1}
@@ -468,27 +542,43 @@ export default function App() {
         hidden
         onChange={(e) => onFiles(e.target.files)}
       />
+      </div>
 
       {busy && (
-        <div className="overlay">
-          <div className="sheet">
-            <p>{busy.label}</p>
-            {busy.progress >= 0 && (
-              <>
-                <div className="bar">
-                  <div style={{ width: `${Math.round(busy.progress * 100)}%` }} />
-                </div>
-                <p className="muted">{Math.round(busy.progress * 100)}%</p>
-                {anyVideo && <button onClick={() => abortRef.current?.abort()}>Cancel</button>}
-              </>
-            )}
-          </div>
-        </div>
+        <Dialog
+          label={busy.label}
+          onEscape={anyVideo ? () => abortRef.current?.abort() : undefined}
+          returnFocus={() => document.querySelector<HTMLElement>('[data-slot]')}
+        >
+          <p role="status">{busy.label}</p>
+          {busy.progress >= 0 && (
+            <>
+              <div
+                className="bar"
+                role="progressbar"
+                aria-label={busy.label}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(busy.progress * 100)}
+              >
+                <div style={{ width: `${Math.round(busy.progress * 100)}%` }} />
+              </div>
+              <p className="muted" aria-hidden="true">
+                {Math.round(busy.progress * 100)}%
+              </p>
+              {anyVideo && <button onClick={() => abortRef.current?.abort()}>Cancel</button>}
+            </>
+          )}
+        </Dialog>
       )}
 
       {result && (
-        <div className="overlay">
-          <div className="sheet result">
+        <Dialog
+          label="Export ready"
+          className="result"
+          onEscape={closeResult}
+          returnFocus={() => document.querySelector<HTMLElement>('.topbar .primary')}
+        >
             {result.blob.type.startsWith('video') ? (
               <video src={result.url} autoPlay loop muted playsInline controls />
             ) : (
@@ -497,40 +587,37 @@ export default function App() {
             <p className="muted">
               {format.w * scale}×{format.h * scale} · {(result.blob.size / 1e6).toFixed(1)} MB
             </p>
+            {result.warning && <p className="sheet-note">{result.warning}</p>}
+            {saveError && (
+              <p className="sheet-note" role="alert">
+                {saveError}
+              </p>
+            )}
             <button
               className="primary wide"
-              onClick={() =>
+              onClick={() => {
+                setSaveError(null);
                 loadExporter()
                   .then(({ saveResult }) => saveResult(result))
-                  .catch((e) => showError((e as Error).message))
-              }
+                  .catch((e) => setSaveError((e as Error).message));
+              }}
             >
               Save
             </button>
             <button className="wide" onClick={closeResult}>
               Back to editing
             </button>
-          </div>
-        </div>
+        </Dialog>
       )}
 
-      {toast && (
-        <div
-          className={toast.error ? 'toast error' : 'toast'}
-          onPointerEnter={() => setToastHeld(true)}
-          onPointerLeave={() => setToastHeld(false)}
-          onFocus={() => setToastHeld(true)}
-          onBlur={() => setToastHeld(false)}
-        >
-          <span>{toast.msg}</span>
-          {toast.action && <button onClick={toast.action.run}>{toast.action.label}</button>}
-          {toast.error && (
-            <button aria-label="Dismiss" onClick={() => setToast(null)}>
-              ×
-            </button>
-          )}
-        </div>
-      )}
+      {/* Two live regions, always in the DOM so screen readers announce what's inserted: errors interrupt, the
+          rest waits its turn. (role="alert" nested in a polite region can be read twice.) */}
+      <div className="toast-region" aria-live="polite">
+        {toast && !toast.error && toastView}
+      </div>
+      <div className="toast-region" aria-live="assertive">
+        {toast?.error && toastView}
+      </div>
     </div>
   );
 }
@@ -541,7 +628,7 @@ function MiniLayout({ count, formatId }: { count: Count; formatId: FormatId }) {
   const gap = 14;
   return (
     <div className="mini-box">
-      <svg viewBox={`0 0 ${f.w} ${f.h}`} className="mini">
+      <svg viewBox={`0 0 ${f.w} ${f.h}`} className="mini" aria-hidden="true">
         {rects.map((r, i) => (
           <rect
             key={i}
@@ -558,6 +645,52 @@ function MiniLayout({ count, formatId }: { count: Count; formatId: FormatId }) {
   );
 }
 
+// ---------- Dialog: focus moves in, background is inert (set by the caller), Escape closes ----------
+
+function Dialog(props: {
+  label: string;
+  className?: string;
+  onEscape?: () => void;
+  /** Where focus goes when the dialog closes if it can't go back where it was (that control is gone, or focus was
+   *  never on one). */
+  returnFocus?: () => HTMLElement | null;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const returnFocus = useRef(props.returnFocus);
+  useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null;
+    const el = ref.current!;
+    (el.querySelector<HTMLElement>('button') ?? el).focus();
+    // Restore after React has lifted `inert` from the page behind, or the target can't take focus.
+    return () =>
+      void setTimeout(() => {
+        const back = prev && prev !== document.body && prev.isConnected ? prev : returnFocus.current?.();
+        back?.focus();
+      });
+  }, []);
+  return (
+    <div className="overlay">
+      <div
+        ref={ref}
+        className={props.className ? `sheet ${props.className}` : 'sheet'}
+        role="dialog"
+        aria-modal="true"
+        aria-label={props.label}
+        tabIndex={-1}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && props.onEscape) {
+            e.stopPropagation();
+            props.onEscape();
+          }
+        }}
+      >
+        {props.children}
+      </div>
+    </div>
+  );
+}
+
 // ---------- Stage: live preview + gestures ----------
 
 interface StageProps {
@@ -567,8 +700,10 @@ interface StageProps {
   bg: string;
   selected: number | null;
   onSelect: (i: number | null) => void;
+  onDeselect: () => void;
   onEmptyTap: (i: number) => void;
   onTransform: (i: number, t: Transform) => void;
+  onNudge: (i: number, dx: number, dy: number, dz?: number) => void;
   onMove: (i: number, dir: -1 | 1) => void;
   onRemove: (i: number) => void;
 }
@@ -592,6 +727,7 @@ function Stage(p: StageProps) {
 
   const s = size.w / f.w;
   const rects = computeSlots(f, p.layout);
+  const n = p.slots.length;
 
   return (
     <div className="stage-wrap" ref={wrap} onPointerDown={(e) => e.target === e.currentTarget && p.onSelect(null)}>
@@ -601,6 +737,7 @@ function Stage(p: StageProps) {
             <SlotView
               key={slot.media?.id ?? `empty${i}`}
               index={i}
+              count={n}
               rect={rects[i]}
               s={s}
               radius={p.layout.radius}
@@ -608,9 +745,11 @@ function Stage(p: StageProps) {
               selected={p.selected === i}
               onTap={() => (slot.media ? p.onSelect(i) : p.onEmptyTap(i))}
               onTransform={(t) => p.onTransform(i, t)}
+              onNudge={(dx, dy, dz) => p.onNudge(i, dx, dy, dz)}
+              onDeselect={p.onDeselect}
               onGestureStart={() => slot.media && p.onSelect(i)}
               onUp={i > 0 ? () => p.onMove(i, -1) : undefined}
-              onDown={i < p.slots.length - 1 ? () => p.onMove(i, 1) : undefined}
+              onDown={i < n - 1 ? () => p.onMove(i, 1) : undefined}
               onRemove={() => p.onRemove(i)}
             />
           ))}
@@ -621,6 +760,7 @@ function Stage(p: StageProps) {
 
 interface SlotViewProps {
   index: number;
+  count: number;
   rect: Rect;
   s: number;
   radius: number;
@@ -628,6 +768,8 @@ interface SlotViewProps {
   selected: boolean;
   onTap: () => void;
   onTransform: (t: Transform) => void;
+  onNudge: (dx: number, dy: number, dz?: number) => void;
+  onDeselect: () => void;
   onGestureStart: () => void;
   onUp?: () => void;
   onDown?: () => void;
@@ -642,13 +784,26 @@ const Icon = ({ d, size = 18 }: { d: string; size?: number }) => (
 const ICON_BACK = 'M15 18l-6-6 6-6';
 const ICON_UP = 'M12 19V5M5 12l7-7 7 7';
 const ICON_DOWN = 'M12 5v14M19 12l-7 7-7-7';
+const ICON_LEFT = 'M19 12H5M12 19l-7-7 7-7';
+const ICON_RIGHT = 'M5 12h14M12 5l7 7-7 7';
 const ICON_TRASH = 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6';
 
+function slotLabel(index: number, count: number, m: SlotState['media'], selected: boolean) {
+  const where = `Slot ${index + 1} of ${count}`;
+  if (!m) return `${where}, empty. Add a photo or video`;
+  const what = m.kind === 'video' ? `video, ${m.duration.toFixed(1)} seconds` : 'photo';
+  return `${where}, ${what}${selected ? ', selected' : ''}`;
+}
+
 function SlotView(props: SlotViewProps) {
-  const { index, rect, s, radius, slot, selected, onTap, onTransform, onGestureStart, onUp, onDown, onRemove } = props;
+  const { index, count, rect, s, radius, slot, selected, onTap, onTransform, onNudge, onDeselect, onGestureStart } = props;
+  const { onUp, onDown, onRemove } = props;
   const m = slot.media;
+  const el = useRef<HTMLDivElement>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef<{ moved: number; startT: Transform; pinchDist?: number } | null>(null);
+  // A drag or pinch ends with a click like any tap would: swallow that one.
+  const suppressClick = useRef(false);
   const tRef = useRef(slot.t);
   tRef.current = slot.t;
 
@@ -658,11 +813,16 @@ function SlotView(props: SlotViewProps) {
     tRef.current = t; // keep successive pointer moves consistent before React re-renders
     onTransform(t);
   };
+  const applyRef = useRef(apply);
+  applyRef.current = apply;
 
   const onPointerDown = (e: React.PointerEvent) => {
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (!gesture.current) gesture.current = { moved: 0, startT: tRef.current };
+    if (!gesture.current) {
+      gesture.current = { moved: 0, startT: tRef.current };
+      suppressClick.current = false;
+    }
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()];
       gesture.current.pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
@@ -698,7 +858,12 @@ function SlotView(props: SlotViewProps) {
     pointers.current.delete(e.pointerId);
     if (pointers.current.size === 1 && gesture.current) gesture.current.pinchDist = undefined;
     if (pointers.current.size === 0) {
-      if (gesture.current && gesture.current.moved <= 6) onTap();
+      if (gesture.current && gesture.current.moved > 6) {
+        suppressClick.current = true;
+        // Touch browsers send no click after a moved touch: don't let the flag swallow a later keyboard or
+        // VoiceOver click. A click that does follow is dispatched before this timer runs.
+        window.setTimeout(() => (suppressClick.current = false));
+      }
       gesture.current = null;
     }
   };
@@ -710,10 +875,68 @@ function SlotView(props: SlotViewProps) {
     else if (gesture.current) gesture.current.pinchDist = undefined;
   };
 
-  const onWheel = (e: React.WheelEvent) => {
-    if (!m) return;
-    apply({ ...tRef.current, zoom: tRef.current.zoom * Math.exp(-e.deltaY / 400) });
+  // Taps arrive as clicks: from a finger, a mouse, Enter/Space on the focused slot, or a screen reader's activate.
+  const onClick = () => {
+    if (suppressClick.current) {
+      suppressClick.current = false;
+      return;
+    }
+    onTap();
   };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (!m || !selected) return; // Enter/Space select first; then arrows, +/- and Escape adjust
+    const step = e.shiftKey ? 0.25 : 0.1;
+    const keys: Record<string, () => void> = {
+      ArrowLeft: () => onNudge(-step, 0),
+      ArrowRight: () => onNudge(step, 0),
+      ArrowUp: () => onNudge(0, -step),
+      ArrowDown: () => onNudge(0, step),
+      '+': () => onNudge(0, 0, 1.1),
+      '=': () => onNudge(0, 0, 1.1),
+      '-': () => onNudge(0, 0, 1 / 1.1),
+      Escape: onDeselect,
+    };
+    const run = keys[e.key];
+    if (!run) return;
+    e.preventDefault();
+    run();
+  };
+
+  // Zoom with the wheel (selected slot only, so scrolling over the frame doesn't change it by accident) or a
+  // trackpad pinch (any slot). Listen natively: React's wheel handler is passive and can't stop the page zooming
+  // too. Chrome sends a pinch as ctrl+wheel; Safari sends gesture events.
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  useEffect(() => {
+    if (!m) return;
+    const node = el.current!;
+    const zoomBy = (f: number) => applyRef.current({ ...tRef.current, zoom: tRef.current.zoom * f });
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !selectedRef.current) return;
+      e.preventDefault();
+      zoomBy(Math.exp(-e.deltaY / (e.ctrlKey ? 100 : 400))); // pinch deltas are small
+    };
+    let zoom0 = 1;
+    const onGestureStart = (e: Event) => {
+      e.preventDefault();
+      zoom0 = tRef.current.zoom;
+    };
+    const onGestureChange = (e: Event) => {
+      e.preventDefault();
+      // On iOS a touch pinch also fires these, but pointer events already handle it.
+      if (pointers.current.size > 0) return;
+      zoomBy((zoom0 * (e as Event & { scale: number }).scale) / tRef.current.zoom);
+    };
+    node.addEventListener('wheel', onWheel, { passive: false });
+    node.addEventListener('gesturestart', onGestureStart);
+    node.addEventListener('gesturechange', onGestureChange);
+    return () => {
+      node.removeEventListener('wheel', onWheel);
+      node.removeEventListener('gesturestart', onGestureStart);
+      node.removeEventListener('gesturechange', onGestureChange);
+    };
+  }, [m]);
 
   const d = m ? mediaRect(rect, m.w, m.h, slot.t) : null;
   const mediaStyle: React.CSSProperties | undefined = d
@@ -722,36 +945,49 @@ function SlotView(props: SlotViewProps) {
 
   return (
     <div
+      ref={el}
       className={`slot${selected ? ' selected' : ''}${m ? '' : ' empty'}`}
       style={{ left: rect.x * s, top: rect.y * s, width: rect.w * s, height: rect.h * s, borderRadius: radius * s }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
-      onWheel={onWheel}
+      onClick={onClick}
     >
       {m?.kind === 'image' && <img src={m.url} style={mediaStyle} draggable={false} alt="" />}
       {m?.kind === 'video' && <video src={m.url} style={mediaStyle} autoPlay loop muted playsInline />}
       {!m && (
-        <div className="placeholder">
+        <div className="placeholder" aria-hidden="true">
           <span className="plus">+</span>
           <span>{index + 1}</span>
         </div>
       )}
-      {m?.kind === 'video' && <span className="badge">{m.duration.toFixed(1)}s</span>}
+      {m?.kind === 'video' && (
+        <span className="badge" aria-hidden="true">
+          {m.duration.toFixed(1)}s
+        </span>
+      )}
+      {/* The slot's keyboard and screen-reader handle. Its click bubbles to the slot's onClick. */}
+      <button
+        className="slot-hit"
+        data-slot={index}
+        aria-label={slotLabel(index, count, m, selected)}
+        aria-keyshortcuts={m && selected ? 'ArrowLeft ArrowRight ArrowUp ArrowDown Plus - Escape' : undefined}
+        onKeyDown={onKeyDown}
+      />
       {m && selected && (
-        <div className="slot-actions" onPointerDown={(e) => e.stopPropagation()}>
+        <div className="slot-actions" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           {onUp && (
-            <button aria-label="Move up" onClick={onUp}>
+            <button aria-label={`Move slot ${index + 1} up`} onClick={onUp}>
               <Icon d={ICON_UP} />
             </button>
           )}
           {onDown && (
-            <button aria-label="Move down" onClick={onDown}>
+            <button aria-label={`Move slot ${index + 1} down`} onClick={onDown}>
               <Icon d={ICON_DOWN} />
             </button>
           )}
-          <button aria-label="Remove" className="danger" onClick={onRemove}>
+          <button aria-label={`Remove slot ${index + 1}`} className="danger" onClick={onRemove}>
             <Icon d={ICON_TRASH} />
           </button>
         </div>
