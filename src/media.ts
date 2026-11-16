@@ -7,8 +7,12 @@ export interface Media {
   url: string;
   w: number; // display width (after rotation)
   h: number;
-  duration: number; // seconds, 0 for images
+  /** Video only: timestamp of the first video frame. Often 0, but trimmed or edited clips can start later. */
+  start: number;
+  duration: number; // seconds of video (from the first to the last frame), 0 for images
   hasAudio: boolean;
+  /** The clip has a sound track this browser can't decode (e.g. Safari before 26 has no WebCodecs AudioDecoder). */
+  audioUnsupported: boolean;
   image?: HTMLImageElement;
 }
 
@@ -30,7 +34,10 @@ export async function loadMedia(file: File): Promise<Media> {
       throw new Error(`Couldn't open “${file.name}”. Try a JPEG or PNG.`);
     }
     // naturalWidth/Height already respect EXIF orientation in modern browsers.
-    return { id, kind: 'image', file, url, w: img.naturalWidth, h: img.naturalHeight, duration: 0, hasAudio: false, image: img };
+    return {
+      id, kind: 'image', file, url, w: img.naturalWidth, h: img.naturalHeight,
+      start: 0, duration: 0, hasAudio: false, audioUnsupported: false, image: img,
+    };
   }
 
   const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
@@ -40,10 +47,16 @@ export async function loadMedia(file: File): Promise<Media> {
     if (!(await track.canDecode())) {
       throw new Error(`This browser can't decode “${file.name}” (${track.codec ?? 'unknown codec'}).`);
     }
-    const duration = await input.computeDuration();
+    // Time the loop on the video track itself: the container's duration also counts a longer audio track,
+    // and measures from 0 even when the first frame comes later.
+    const start = await track.getFirstTimestamp();
+    const duration = Math.max(0, (await track.computeDuration()) - start);
     const audio = await input.getPrimaryAudioTrack();
     const hasAudio = !!audio && (await audio.canDecode());
-    return { id, kind: 'video', file, url, w: track.displayWidth, h: track.displayHeight, duration, hasAudio };
+    return {
+      id, kind: 'video', file, url, w: track.displayWidth, h: track.displayHeight,
+      start, duration, hasAudio, audioUnsupported: !!audio && !hasAudio,
+    };
   } catch (e) {
     URL.revokeObjectURL(url);
     throw e instanceof Error ? e : new Error(String(e));
