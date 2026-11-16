@@ -32,8 +32,9 @@
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
+/* Dark follows the system unless the page is told otherwise (data-theme, e.g. inside a host app). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --bg: #0a0a0b;
     --surface: #111113;
     --panel: #111113;
@@ -58,6 +59,31 @@
     --shadow-lg: 0 0 0 1px var(--line), 0 16px 40px -8px rgba(0, 0, 0, 0.6);
     color-scheme: dark;
   }
+}
+:root[data-theme='dark'] {
+  --bg: #0a0a0b;
+  --surface: #111113;
+  --panel: #111113;
+  --sunken: #19191c;
+  --sunken-2: #222226;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --text: #ededef;
+  --muted: #9a9aa2;
+  --faint: #5c5c63;
+  --accent: #3352ff; /* white text 5.4:1 */
+  --accent-soft: rgba(80, 110, 255, 0.14);
+  --accent-text: #8ea2ff;
+  --orb: #4d6bff;
+  --tile: #232327;
+  --tile-on: #2b3577;
+  --disabled-bg: #1c1c1f;
+  --disabled-text: #85858c;
+  --danger: #ff6369;
+  --scrim: rgba(10, 10, 11, 0.6);
+  --shadow-sm: 0 0 0 1px var(--line);
+  --shadow-lg: 0 0 0 1px var(--line), 0 16px 40px -8px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
