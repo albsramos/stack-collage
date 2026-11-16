@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite --host",
     "build": "tsc -p . && vite build",
-    "preview": "vite preview --host"
+    "preview": "vite preview --host",
+    "icons": "NODE_PATH=$(npm root -g) node --experimental-strip-types scripts/make-icons.mjs"
   },
   "dependencies": {
     "@mediabunny/aac-encoder": "^1.65.2",

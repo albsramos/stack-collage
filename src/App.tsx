@@ -15,6 +15,7 @@ import {
 } from './layout';
 import { loadMedia, releaseMedia, type Media } from './media';
 import type { ExportResult, SlotState } from './exporter';
+import { Orb } from './Orb';
 
 // The exporter pulls in mediabunny (~200 KB gzipped). Load it when it's first needed, not on startup.
 const loadExporter = () => import('./exporter');
@@ -98,10 +99,9 @@ export default function App() {
   });
 
   // The strip iOS reserves below a Home Screen app shows the page background: match whatever sits at the bottom.
+  // (CSS picks the colour from data-step, so it follows the light/dark theme.)
   useEffect(() => {
-    const c = step === 'editor' ? '#161618' : '#09090b';
-    document.documentElement.style.backgroundColor = c;
-    document.body.style.backgroundColor = c;
+    document.documentElement.dataset.step = step;
   }, [step]);
 
   const format = FORMATS[formatId];
@@ -425,7 +425,15 @@ export default function App() {
   if (step === 'start') {
     return (
       <div className="screen start">
-        <h1 className="pick-title">Pick your template</h1>
+        <header className="brand">
+          <Orb size={24} grid={18} />
+          <span>Stack</span>
+          <span className="brand-meta">ON-DEVICE</span>
+        </header>
+        <div className="pick-head">
+          <h1 className="pick-title">Pick a template</h1>
+          <p className="pick-sub">Stack photos or videos into one frame.</p>
+        </div>
         <main className="pick">
           <div className="pick-row" role="group" aria-label="Number of cards">
             {([2, 3] as Count[]).map((c) => (
@@ -492,7 +500,11 @@ export default function App() {
           <Icon d={ICON_BACK} size={22} />
         </button>
         <span className="title">
+          <Orb size={18} grid={14} busy={!!busy} />
           {FORMATS[formatId].label}
+          <span className="title-meta" aria-hidden="true">
+            {active.filter((s) => s.media).length}/{count}
+          </span>
         </span>
         <button className="primary" disabled={!filled || !!busy} onClick={() => setChoosing(true)}>
           Export
@@ -687,7 +699,7 @@ export default function App() {
                 {exportedOnce && k === scale && <span className="size-tag">Last used</span>}
               </span>
               <span className="size-meta">
-                {format.w * k}×{format.h * k} · {k === 1 ? 'right for Instagram and most apps' : 'sharper, about 2× the file size'}
+                <span className="mono">{format.w * k}×{format.h * k}</span> · {k === 1 ? 'right for Instagram and most apps' : 'sharper, about 2× the file size'}
               </span>
             </button>
           ))}
@@ -700,10 +712,14 @@ export default function App() {
       {busy && (
         <Dialog
           label={busy.label}
+          className="busy"
           onEscape={anyVideo ? () => abortRef.current?.abort() : undefined}
           returnFocus={() => document.querySelector<HTMLElement>('[data-slot]')}
         >
-          <p role="status">{busy.label}</p>
+          <Orb size={88} grid={36} busy progress={busy.progress >= 0 ? busy.progress : null} />
+          <p role="status" className="busy-label">
+            {busy.label}
+          </p>
           {busy.progress >= 0 && (
             <>
               <div
@@ -716,10 +732,14 @@ export default function App() {
               >
                 <div style={{ width: `${Math.round(busy.progress * 100)}%` }} />
               </div>
-              <p className="muted" aria-hidden="true">
-                {Math.round(busy.progress * 100)}%
+              <p className="pct" aria-hidden="true">
+                {String(Math.round(busy.progress * 100)).padStart(2, '0')}%
               </p>
-              {anyVideo && <button onClick={() => abortRef.current?.abort()}>Cancel</button>}
+              {anyVideo && (
+                <button className="wide" onClick={() => abortRef.current?.abort()}>
+                  Cancel
+                </button>
+              )}
             </>
           )}
         </Dialog>
@@ -732,12 +752,16 @@ export default function App() {
           onEscape={closeResult}
           returnFocus={() => document.querySelector<HTMLElement>('.topbar .primary')}
         >
+            <p className="result-head">
+              <Orb size={18} grid={14} />
+              Ready
+            </p>
             {result.blob.type.startsWith('video') ? (
               <video src={result.url} autoPlay loop muted playsInline controls />
             ) : (
               <img src={result.url} alt="Exported collage" />
             )}
-            <p className="muted">
+            <p className="muted mono">
               {format.w * scale}×{format.h * scale} · {(result.blob.size / 1e6).toFixed(1)} MB
             </p>
             {result.warning && <p className="sheet-note">{result.warning}</p>}
@@ -889,7 +913,7 @@ function Stage(p: StageProps) {
 
   return (
     <div className="stage-wrap" ref={wrap} onPointerDown={(e) => e.target === e.currentTarget && p.onSelect(null)}>
-      <div className="stage" style={{ width: size.w, height: size.h, background: p.bg }}>
+      <div className="stage" style={{ width: size.w, height: size.h }}>
         {s > 0 &&
           p.slots.map((slot, i) => (
             <SlotView
@@ -1155,7 +1179,7 @@ function SlotView(props: SlotViewProps) {
       {!m && (
         <div className="placeholder" aria-hidden="true">
           <span className="plus">+</span>
-          <span>{index + 1}</span>
+          <span className="slot-num">{String(index + 1).padStart(2, '0')}</span>
         </div>
       )}
       {m?.kind === 'video' && (
