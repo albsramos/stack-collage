@@ -118,7 +118,7 @@ button { font: inherit; color: inherit; }
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
 }
 
-button.primary, .buttons button, .sheet button, .chip {
+button.primary, .buttons button, .sheet button {
   border: 1px solid var(--line);
   background: var(--panel);
   border-radius: 12px;
@@ -204,23 +204,75 @@ button.wide { width: 100%; padding: 13px; }
   margin-bottom: calc(-1 * env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
 }
-.tools { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
-.row { display: flex; align-items: center; gap: 12px; }
-.row > label, .row > .label { width: 84px; flex: none; color: var(--muted); font-size: 14px; }
-.row input[type='range'] { flex: 1; accent-color: var(--accent); }
-.row.end { justify-content: flex-end; }
-.row.end > label, .row.end > .label { width: auto; }
-.row.end .chips { flex: 0 1 auto; }
-.chips { display: flex; gap: 8px; overflow-x: auto; flex: 1; padding: 4px; scrollbar-width: none; } /* room for focus rings */
-.chips::-webkit-scrollbar { display: none; }
-.chip { padding: 8px 12px; font-size: 14px; border-radius: 10px; }
-.chip.on { background: var(--text); color: #111; border-color: var(--text); }
-.buttons { display: flex; flex-wrap: wrap; gap: 8px; }
-.nudge { display: flex; gap: 8px; }
-.nudge button {
-  width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid var(--line); border-radius: 12px; background: var(--panel); cursor: pointer; padding: 0;
+/* Two fixed 48px slots in both modes (settings / editing a slot): the panel never changes height, so the
+   frame above it never resizes. Things that come and go do so inside these slots. */
+.tools {
+  padding: 14px 16px 16px; display: grid; grid-template-rows: 48px 48px; gap: 12px;
+  animation: fade 0.15s ease-out;
 }
+.slot-a, .slot-b { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; }
+.slot-a input[type='range'] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.slot-b > * { animation: fade 0.15s ease-out; }
+.slot-b .hint { max-width: 36ch; }
+
+/* Segmented groups: one rounded track, the chosen option lit. Focus rings sit inside the button so the
+   group can clip its contents while it grows in. */
+.seg {
+  display: flex; flex: 0 1 auto; min-width: 0; gap: 2px; padding: 2px; height: 44px;
+  background: #232326; border-radius: 12px; overflow: hidden;
+}
+.seg button {
+  flex: 0 1 40px; min-width: 34px; height: 40px; padding: 0; border: 0; border-radius: 10px;
+  background: transparent; color: var(--text); font-weight: 600; font-size: 15px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; white-space: nowrap;
+}
+.seg button.on { background: var(--text); color: #111; }
+.seg button:focus-visible { outline-offset: -3px; }
+.seg button.on:focus-visible { outline-color: var(--accent); }
+@media (hover: hover) { .seg button:not(.on):hover { background: #2f2f33; } }
+
+/* Groups and options that appear later (a video added, a clip with sound) open sideways from nothing:
+   the row re-centres smoothly and nothing moves vertically. */
+.pop-group { animation: pop-group 0.22s ease-out; }
+.seg .pop { animation: pop 0.22s ease-out; }
+@keyframes pop-group {
+  from { max-width: 0; padding-left: 0; padding-right: 0; margin-left: -8px; opacity: 0; transform: translateX(6px); }
+  to { max-width: 200px; opacity: 1; }
+}
+@keyframes pop {
+  from { max-width: 0; min-width: 0; margin-left: -2px; opacity: 0; }
+  to { max-width: 40px; opacity: 1; }
+}
+@keyframes fade { from { opacity: 0; } }
+
+.add { height: 48px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.add .count { font-size: 13px; font-weight: 500; opacity: 0.75; font-variant-numeric: tabular-nums; }
+.seg-label {
+  align-self: center; padding: 0 8px 0 10px; font-size: 13px; font-weight: 500; color: var(--muted); white-space: nowrap;
+}
+.icon-btn {
+  flex: none; width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  border: 0; border-radius: 12px; background: #232326; color: var(--text); cursor: pointer;
+}
+.zoom-row { gap: 12px; }
+.slot-b .seg.move { flex: none; }
+.slot-b .done { flex: 1; height: 44px; min-width: 0; }
+
+/* Export: pick the size at the moment it matters */
+.sheet-title { font-size: 17px; font-weight: 600; text-align: center; }
+.sheet .size-option {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%; text-align: left; padding: 14px 16px;
+  white-space: normal;
+}
+.sheet .size-option.last { border-color: var(--text); }
+.size-name { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+.size-tag { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 6px; background: #2f2f33; color: var(--muted); }
+.size-meta { font-size: 13px; font-weight: 400; color: var(--muted); }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 .editor-main { display: contents; }
 .hint { margin: 0; color: var(--muted); font-size: 12px; text-align: center; }
 
@@ -307,6 +359,9 @@ html, body { transition: background-color 0.2s; }
     border-top: 0; border-left: 1px solid var(--line); border-radius: 18px 0 0 0;
   }
   .pick { flex-direction: row; }
+  /* Beside the frame the panel's height doesn't touch the frame's size, so let it size to content. */
+  .editor .tools { grid-template-rows: auto auto; }
+  .editor .slot-a { flex-wrap: wrap; }
 }
 
 @media (prefers-reduced-motion: reduce) {
