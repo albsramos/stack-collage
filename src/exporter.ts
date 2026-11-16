@@ -15,7 +15,7 @@ import {
   type VideoCodec,
   canEncodeAudio,
   getFirstEncodableAudioCodec,
-  getFirstEncodableVideoCodec,
+  canEncodeVideo,
   type WrappedCanvas,
 } from 'mediabunny';
 import { clamp, computeSlots, mediaRect, type Format, type LayoutOpts, type Rect, type Transform } from './layout';
@@ -209,6 +209,40 @@ async function openVideoFeed(media: Media, rect: Rect, s: SlotState, total: numb
   }
 }
 
+interface VideoConfig {
+  codec: VideoCodec;
+  fullCodecString?: string;
+  bitrate: number;
+}
+
+/**
+ * Finds a codec + profile + bitrate the browser will actually accept at this size. Probing only the codec and size
+ * isn't enough: iOS Safari passes `avc` at 2160×3840, then rejects the real config (Baseline profile, ~45 Mbps) once
+ * encoding starts. So every candidate is probed exactly as it will be configured, best first.
+ */
+async function pickVideoConfig(width: number, height: number, k: number): Promise<VideoConfig | null> {
+  // ~16 Mbps at 1080×1920 — well above what Instagram keeps, so their re-encode starts from a clean master.
+  // At 2× this grows by k^1.5 (~45 Mbps), not k² (64 Mbps): the extra bits buy little once the encoder has 4× the
+  // pixels to spend them on, and a 60 s 2× file stays ~340 MB instead of ~480 MB.
+  const ideal = Math.round(16_000_000 * k ** 1.5);
+  const bitrates = [...new Set([ideal, 30_000_000, 20_000_000, 12_000_000].filter((b) => b <= ideal))];
+  const codecs: Omit<VideoConfig, 'bitrate'>[] = [
+    { codec: 'avc' }, // mediabunny's pick (Baseline): what plays everywhere
+    { codec: 'avc', fullCodecString: 'avc1.640033' }, // High @ 5.1: what hardware H.264 encoders prefer at 4K
+    { codec: 'avc', fullCodecString: 'avc1.4d0033' }, // Main @ 5.1
+    { codec: 'hevc' }, // iPhones encode 4K HEVC in hardware; Instagram and Photos accept it
+  ];
+  for (const bitrate of bitrates) {
+    for (const c of codecs) {
+      const ok = await canEncodeVideo(c.codec, { width, height, bitrate, frameRate: FPS, fullCodecString: c.fullCodecString }).catch(
+        () => false,
+      );
+      if (ok) return { ...c, bitrate };
+    }
+  }
+  return null;
+}
+
 async function exportVideo(o: ExportOpts): Promise<ExportResult> {
   const k = o.scale;
   const W = o.format.w * k;
@@ -217,12 +251,12 @@ async function exportVideo(o: ExportOpts): Promise<ExportResult> {
   const duration = Math.min(longest, o.maxDuration);
   const total = Math.max(1, Math.round(duration * FPS));
 
-  const videoCodec = await getFirstEncodableVideoCodec(['avc', 'hevc'], { width: W, height: H });
-  if (!videoCodec) throw new Error(`This browser can't encode ${W}×${H} video. Try the Standard size.`);
+  const video = await pickVideoConfig(W, H, k);
+  if (!video) throw new Error(`This browser can't encode ${W}×${H} video. Try the Standard size.`);
 
   const sink = await openOutputFile();
   try {
-    const { warning } = await encodeVideo(o, sink, videoCodec, duration, total);
+    const { warning } = await encodeVideo(o, sink, video, duration, total);
     // Cancel tapped during "Finishing…": the file is complete, but the user asked to stop.
     if (o.signal?.aborted) throw new DOMException('Export cancelled', 'AbortError');
     return { blob: await sink.result(), filename: `collage-${stamp()}.mp4`, warning, release: sink.discard };
@@ -235,7 +269,7 @@ async function exportVideo(o: ExportOpts): Promise<ExportResult> {
 async function encodeVideo(
   o: ExportOpts,
   sink: OutputFile,
-  videoCodec: VideoCodec,
+  video: VideoConfig,
   duration: number,
   total: number,
 ): Promise<{ warning?: string }> {
@@ -244,11 +278,9 @@ async function encodeVideo(
   const { c, ctx } = makeCanvas(o.format.w * k, o.format.h * k);
   const output = new Output({ format: new Mp4OutputFormat({ fastStart: sink.fastStart }), target: sink.target });
   const videoSource = new CanvasSource(c, {
-    codec: videoCodec,
-    // ~16 Mbps at 1080×1920 — well above what Instagram keeps, so their re-encode starts from a clean master.
-    // At 2× this grows by k^1.5 (~45 Mbps), not k² (64 Mbps): the extra bits buy little once the encoder has 4× the
-    // pixels to spend them on, and a 60 s 2× file stays ~340 MB instead of ~480 MB.
-    bitrate: Math.round(16_000_000 * k ** 1.5),
+    codec: video.codec,
+    fullCodecString: video.fullCodecString,
+    bitrate: video.bitrate,
     keyFrameInterval: 2,
   });
   output.addVideoTrack(videoSource, { frameRate: FPS });

@@ -397,15 +397,16 @@ button.wide { width: 100%; padding: 13px; min-height: 46px; }
 
 /* floating actions on the selected slot */
 .slot-actions {
-  position: absolute; z-index: 3; top: 8px; right: 8px; display: flex; gap: 2px; padding: 3px; border-radius: 12px;
+  position: absolute; z-index: 3; top: 8px; right: 8px; display: flex; gap: 4px; padding: 4px; border-radius: 14px;
   background: rgba(18, 18, 20, 0.62); backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 8px 24px -8px rgba(0, 0, 0, 0.4); cursor: default;
   animation: sheet-in 0.25s var(--ease-out); transform-origin: top right;
 }
 .slot-actions button {
-  width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 9px;
+  width: 48px; height: 48px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 10px;
   background: transparent; color: #fafafa; cursor: pointer;
 }
+.slot-actions button svg { width: 22px; height: 22px; }
 .slot-actions button:active { background: rgba(255, 255, 255, 0.12); }
 .slot-actions button.danger { color: #ff7a7f; }
 
@@ -428,6 +429,10 @@ html, body { transition: background-color 0.2s; }
   .pick-head { margin: 12px auto 10px; }
   .editor .tools { grid-template-rows: auto auto; max-width: none; }
   .editor .slot-a { flex-wrap: wrap; }
+  /* The frame is narrow here (a 9:16 story is ~170px wide): keep the compact action bar */
+  .slot-actions { gap: 2px; padding: 3px; border-radius: 12px; }
+  .slot-actions button { width: 40px; height: 40px; border-radius: 9px; }
+  .slot-actions button svg { width: 18px; height: 18px; }
 }
 
 
