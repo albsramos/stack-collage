@@ -28,7 +28,8 @@ const hash = (a: number, b: number) => {
 };
 
 /** Which cells of a `grid`×`grid` board are lit for this frame. */
-export function orbDots(grid: number, f: OrbFrame): Dot[] {
+/** `dust` scales how many specks are shed (1 = the default; small icons look cleaner with fewer). */
+export function orbDots(grid: number, f: OrbFrame, dust = 1): Dot[] {
   const cx = grid / 2;
   const cy = grid * 0.45;
   const R = grid * 0.4;
@@ -68,7 +69,7 @@ export function orbDots(grid: number, f: OrbFrame): Dot[] {
   }
 
   // Dust: specks shed from the shadow side. At rest they twinkle in place; busy, they orbit the sphere.
-  const N = Math.round(grid * 0.55);
+  const N = Math.round(grid * 0.55 * dust);
   for (let k = 0; k < N; k++) {
     const h1 = hash(k, 1.3);
     const h2 = hash(k, 7.9);
