@@ -109,25 +109,20 @@ button:not(:disabled):active { transform: scale(0.97); }
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-/* ---------- start screen: brand, two rows of cards, Start ---------- */
+/* ---------- start screen: heading and orb, two rows of cards, Start ---------- */
 .start {
   background: var(--bg);
   padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
     max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
 }
-.brand {
-  width: 100%; max-width: 440px; margin: 0 auto; display: flex; align-items: center; gap: 8px;
-  font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
-}
-.brand-meta { margin-left: auto; font: 500 11px/1 var(--mono); color: var(--faint); letter-spacing: 0.02em; }
 .install-link {
-  margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 0;
-  border-radius: 999px; background: var(--accent-soft); color: var(--accent-text); font-size: 12px; font-weight: 600;
-  letter-spacing: -0.005em; cursor: pointer;
+  flex: none; align-self: center; margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; height: 36px;
+  padding: 0 12px; border: 0; border-radius: 999px; background: none; color: var(--accent-text); font-size: 13px;
+  font-weight: 600; letter-spacing: -0.005em; cursor: pointer; animation: rise 0.5s 0.16s var(--ease-out) both;
 }
-@media (hover: hover) { .install-link:hover { background: var(--sunken-2); } }
+@media (hover: hover) { .install-link:hover { background: var(--accent-soft); } }
 .pick-head {
-  width: 100%; max-width: 440px; margin: 20px auto 16px; display: flex; align-items: center; justify-content: space-between;
+  width: 100%; max-width: 440px; margin: 8px auto 16px; display: flex; align-items: center; justify-content: space-between;
   gap: 16px; animation: rise 0.5s var(--ease-out) both;
 }
 .hero-orb { flex: none; width: 72px; height: 72px; }

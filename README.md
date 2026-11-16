@@ -49,7 +49,7 @@ Every change eases from the last one, so fast taps blend instead of jittering. T
 
 ## Put it on your Home Screen
 
-Stack is a web app you can install. It opens full screen, works offline, and keeps everything on the device. The app walks you through it (**Use as an app**, top right), but in short:
+Stack is a web app you can install. It opens full screen, works offline, and keeps everything on the device. The app walks you through it (**Use as an app**, under Start), but in short:
 
 - **iPhone, Safari:** Share → **Add to Home Screen** → Add
 - **iPhone, Chrome:** Share in the address bar → **Add to Home Screen** → Add

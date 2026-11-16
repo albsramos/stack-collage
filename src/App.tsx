@@ -482,17 +482,6 @@ export default function App() {
         onPointerDown={aimAt}
         onPointerLeave={() => (orbAim.current = null)}
       >
-        <header className="brand" inert={installOpen}>
-          <span>Stack</span>
-          {installed ? (
-            <span className="brand-meta">ON-DEVICE</span>
-          ) : (
-            <button className="install-link" onClick={() => setInstallOpen(true)}>
-              <Icon d={ICON_INSTALL} size={14} />
-              Use as an app
-            </button>
-          )}
-        </header>
         <div className="pick-head" inert={installOpen}>
           <div>
             <h1 className="pick-title">Pick a template</h1>
@@ -539,6 +528,13 @@ export default function App() {
         <button className="start-btn" disabled={!pickCount || !pickFormat} onClick={start} inert={installOpen}>
           Start
         </button>
+        {/* Only in the browser: once Stack is on the Home Screen there's nothing to install. */}
+        {!installed && (
+          <button className="install-link" onClick={() => setInstallOpen(true)} inert={installOpen}>
+            <Icon d={ICON_INSTALL} size={14} />
+            Use as an app
+          </button>
+        )}
         {installOpen && (
           <InstallGuide
             onClose={() => setInstallOpen(false)}
