@@ -404,8 +404,9 @@ function Stage(p: StageProps) {
 
   useLayoutEffect(() => {
     const el = wrap.current!;
-    const ro = new ResizeObserver(() => {
-      const r = el.getBoundingClientRect();
+    // contentRect excludes .stage-wrap's padding, so the frame fits the space it actually gets.
+    const ro = new ResizeObserver(([entry]) => {
+      const r = entry.contentRect;
       const s = Math.min(r.width / f.w, r.height / f.h);
       setSize({ w: f.w * s, h: f.h * s });
     });

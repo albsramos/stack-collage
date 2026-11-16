@@ -143,6 +143,7 @@ button.wide { width: 100%; padding: 13px; }
   padding: 0 16px;
 }
 .stage {
+  flex: none; /* never let flexbox squeeze it: slots are positioned for this exact size */
   position: relative;
   overflow: hidden;
   box-shadow: 0 0 0 1px var(--line);
