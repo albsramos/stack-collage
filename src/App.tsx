@@ -26,6 +26,18 @@ const MAX_DURATION = 60;
 
 const emptySlots = (): SlotState[] => [0, 1, 2].map(() => ({ media: null, t: { ...IDENTITY } }));
 
+interface Toast {
+  msg: string;
+  /** Errors stay until dismissed; everything else hides itself. */
+  error?: boolean;
+  action?: { label: string; run: () => void };
+}
+
+const UNDO_MS = 6000;
+
+// React StrictMode runs effects twice in development: make sure the history fix-up below runs once.
+let historyNormalized = false;
+
 export default function App() {
   const [step, setStep] = useState<Step>('start');
   const [count, setCount] = useState<Count>(3);
@@ -36,9 +48,10 @@ export default function App() {
   const bg = '#000000'; // never visible: slots always fill the frame
   const [slots, setSlots] = useState<SlotState[]>(emptySlots);
   const [scale, setScale] = useState<1 | 2>(1);
-  const [audioFrom, setAudioFrom] = useState<number | 'auto' | null>('auto');
+  // Which clip's sound to use: a media id (so the choice follows the clip when slots are reordered), 'auto', or off.
+  const [audioFrom, setAudioFrom] = useState<string | 'auto' | null>('auto');
   const [selected, setSelected] = useState<number | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
   const [busy, setBusy] = useState<{ progress: number; label: string } | null>(null);
   const [result, setResult] = useState<(ExportResult & { url: string }) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -55,10 +68,74 @@ export default function App() {
   const anyVideo = hasVideo(active);
   const filled = active.every((s) => s.media);
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
-    window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 4000);
+  const showToast = useCallback((t: Toast | string) => setToast(typeof t === 'string' ? { msg: t } : t), []);
+  const showError = useCallback((msg: string) => showToast({ msg, error: true }), [showToast]);
+
+  // Toasts hide themselves (errors excepted), but not while the pointer or keyboard focus is on them: someone
+  // tabbing or swiping to Undo must be able to reach it.
+  const [toastHeld, setToastHeld] = useState(false);
+  useEffect(() => {
+    if (!toast || toast.error || toastHeld) return;
+    const id = window.setTimeout(() => setToast(null), toast.action ? UNDO_MS : 4000);
+    return () => window.clearTimeout(id);
+  }, [toast, toastHeld]);
+  useEffect(() => setToastHeld(false), [toast]); // a new or cleared toast starts unheld
+  // Ctrl/Cmd+Z runs the toast's action (Undo) while it's showing.
+  useEffect(() => {
+    const action = toast?.action;
+    if (!action) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        action.run();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [toast]);
+
+  // ---------- browser history: the system back gesture returns to the start screen instead of leaving the app ----------
+  // While exporting or showing the result, Back must not leave the editor: the result would be lost (or shown
+  // again later over the wrong template).
+  const holdEditorRef = useRef(false);
+  holdEditorRef.current = !!busy || !!result;
+  const enteredRef = useRef(false); // has Start been pressed in this page load?
+  useEffect(() => {
+    // After a reload in the editor, the current entry still says "editor" but the app opens on the start screen:
+    // step back onto the start entry, so the first back gesture isn't a no-op.
+    if (!historyNormalized && (history.state as { stack?: string } | null)?.stack === 'editor') history.back();
+    historyNormalized = true;
+    const onPop = (e: PopStateEvent) => {
+      if ((e.state as { stack?: string } | null)?.stack === 'editor') {
+        // Forward into the editor: fine if it was opened in this page load (the slots are still there). An entry
+        // left over from before a reload would open an empty editor on a template nobody picked: bounce back.
+        if (enteredRef.current) setStep('editor');
+        else history.back();
+        return;
+      }
+      if (holdEditorRef.current) {
+        history.pushState({ stack: 'editor' }, ''); // restore the entry we just left
+        return;
+      }
+      setSelected(null);
+      setStep('start');
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
   }, []);
+
+  // Desktop browsers ask before a reload or closing the tab throws away loaded media. (iOS Safari ignores
+  // beforeunload, so on iPhone this does nothing; the history entry above covers the back gesture there.)
+  const hasMedia = slots.some((s) => s.media);
+  useEffect(() => {
+    if (!hasMedia) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [hasMedia]);
 
   // ---------- file picking ----------
   const fileInput = useRef<HTMLInputElement>(null);
@@ -78,36 +155,77 @@ export default function App() {
     const indices =
       target === 'fill' ? active.map((s, i) => (s.media ? -1 : i)).filter((i) => i >= 0) : [target];
     const list = Array.from(files).slice(0, indices.length);
+    // Finish any pending undo first: an Undo landing mid-load would race the slots being filled.
+    settleUndo();
+    setToast(null);
     setBusy({ progress: -1, label: 'Opening…' });
+    const errors: string[] = [];
     for (let j = 0; j < list.length; j++) {
       try {
         const m = await loadMedia(list[j]);
         const idx = indices[j];
-        setSlots((prev) => {
-          const next = [...prev];
-          releaseMedia(next[idx].media);
-          next[idx] = { media: m, t: { ...IDENTITY } };
-          return next;
-        });
+        // What's being replaced, from the latest render (outside the updater: StrictMode runs updaters twice).
+        releaseMedia(slotsRef.current[idx].media);
+        setSlots((prev) => prev.map((s, k) => (k === idx ? { media: m, t: { ...IDENTITY } } : s)));
       } catch (e) {
-        showToast((e as Error).message);
+        errors.push((e as Error).message);
       }
     }
     setBusy(null);
+    if (errors.length) showError(errors.join(' '));
+    else if (files.length > list.length) {
+      showToast(`Added ${list.length} of ${files.length}: only ${list.length} slot${list.length === 1 ? ' was' : 's were'} empty.`);
+    }
   };
 
   // ---------- slot ops ----------
   const setT = (i: number, t: Transform) =>
     setSlots((prev) => prev.map((s, k) => (k === i ? { ...s, t } : s)));
 
+  // A removed clip is kept while its "Removed · Undo" toast shows; its memory is released once the toast goes.
+  const undoRef = useRef<{ index: number; slot: SlotState } | null>(null);
+  // The Undo button can be pressed after later renders: read the latest slots, not the ones it closed over.
+  const slotsRef = useRef(slots);
+  slotsRef.current = slots;
+  const countRef = useRef(count);
+  countRef.current = count;
+  const settleUndo = () => {
+    const u = undoRef.current;
+    if (!u) return;
+    releaseMedia(u.slot.media);
+    undoRef.current = null;
+  };
+  useEffect(() => settleUndo, []); // release on unmount
+  // The Undo toast expired, was dismissed or replaced: the removal is final.
+  useEffect(() => {
+    if (!toast?.action) settleUndo();
+  }, [toast]);
+
   const removeSlot = (i: number) => {
-    setSlots((prev) => {
-      const next = [...prev];
-      releaseMedia(next[i].media);
-      next[i] = { media: null, t: { ...IDENTITY } };
-      return next;
-    });
+    settleUndo(); // only the latest removal can be undone
+    const removed = slots[i];
+    setSlots((prev) => prev.map((s, k) => (k === i ? { media: null, t: { ...IDENTITY } } : s)));
     setSelected(null);
+    undoRef.current = { index: i, slot: removed };
+    showToast({ msg: 'Removed', action: { label: 'Undo', run: undoRemove } });
+  };
+
+  const undoRemove = () => {
+    const u = undoRef.current;
+    if (!u) return;
+    undoRef.current = null;
+    setToast(null);
+    // Put it back where it was, or in the first visible empty slot if that one has been filled (or hidden, by
+    // switching to a 2-card template) since.
+    const now = slotsRef.current;
+    const n = countRef.current;
+    const at = u.index < n && !now[u.index].media ? u.index : now.findIndex((s, k) => k < n && !s.media);
+    if (at < 0) {
+      releaseMedia(u.slot.media);
+      showToast('No empty slot to put it back in.');
+      return;
+    }
+    setSlots((prev) => prev.map((s, k) => (k === at ? u.slot : s)));
   };
 
   const moveSlot = (i: number, dir: -1 | 1) => {
@@ -128,15 +246,27 @@ export default function App() {
     setFormatId(pickFormat);
     setLayout(defaultLayout(pickCount, pickFormat));
     setStep('editor');
+    enteredRef.current = true;
+    // Normally push; if we're already on an "editor" entry (back then forward) reuse it so Back stays one step.
+    if ((history.state as { stack?: string } | null)?.stack === 'editor') history.replaceState({ stack: 'editor' }, '');
+    else history.pushState({ stack: 'editor' }, '');
+  };
+
+  const back = () => {
+    setSelected(null);
+    // Leave through history so the entry pushed by start() doesn't linger (and the popstate handler switches screens).
+    if ((history.state as { stack?: string } | null)?.stack === 'editor') history.back();
+    else setStep('start');
   };
 
   const resolvedAudio = useMemo(() => {
-    if (audioFrom === 'auto') {
-      const i = active.findIndex((s) => s.media?.kind === 'video' && s.media.hasAudio);
-      return i >= 0 ? i : null;
-    }
     if (audioFrom === null) return null;
-    return active[audioFrom]?.media?.kind === 'video' ? audioFrom : null;
+    const withSound = (s: SlotState) => s.media?.kind === 'video' && s.media.hasAudio;
+    const chosen = active.findIndex((s) => withSound(s) && s.media!.id === audioFrom);
+    if (chosen >= 0) return chosen;
+    // 'auto', or the chosen clip was removed: use the first clip that has sound.
+    const i = active.findIndex(withSound);
+    return i >= 0 ? i : null;
   }, [audioFrom, active]);
 
   const doExport = async () => {
@@ -165,11 +295,11 @@ export default function App() {
         },
       });
       setResult({ ...r, url: URL.createObjectURL(r.blob) });
-      if (r.warning) showToast(r.warning);
+      if (r.warning) showError(r.warning);
     } catch (e) {
       if ((e as DOMException).name !== 'AbortError') {
         console.error(e);
-        showToast(`Export failed: ${(e as Error).message}`);
+        showError(`Export failed: ${(e as Error).message}`);
       }
     } finally {
       setBusy(null);
@@ -232,7 +362,7 @@ export default function App() {
   return (
     <div className="screen editor">
       <div className="topbar">
-        <button className="icon" onClick={() => { setSelected(null); setStep('start'); }} aria-label="Back">
+        <button className="icon" onClick={back} aria-label="Back">
           <Icon d={ICON_BACK} size={22} />
         </button>
         <span className="title">
@@ -314,7 +444,7 @@ export default function App() {
                       <button
                         key={i}
                         className={resolvedAudio === i ? 'chip on' : 'chip'}
-                        onClick={() => setAudioFrom(i)}
+                        onClick={() => setAudioFrom(s.media!.id)}
                       >
                         Video {i + 1}
                       </button>
@@ -372,7 +502,7 @@ export default function App() {
               onClick={() =>
                 loadExporter()
                   .then(({ saveResult }) => saveResult(result))
-                  .catch((e) => showToast((e as Error).message))
+                  .catch((e) => showError((e as Error).message))
               }
             >
               Save
@@ -384,7 +514,23 @@ export default function App() {
         </div>
       )}
 
-      {toast && <div className="toast">{toast}</div>}
+      {toast && (
+        <div
+          className={toast.error ? 'toast error' : 'toast'}
+          onPointerEnter={() => setToastHeld(true)}
+          onPointerLeave={() => setToastHeld(false)}
+          onFocus={() => setToastHeld(true)}
+          onBlur={() => setToastHeld(false)}
+        >
+          <span>{toast.msg}</span>
+          {toast.action && <button onClick={toast.action.run}>{toast.action.label}</button>}
+          {toast.error && (
+            <button aria-label="Dismiss" onClick={() => setToast(null)}>
+              ×
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -557,6 +703,13 @@ function SlotView(props: SlotViewProps) {
     }
   };
 
+  // The system took the touch (a notification, an OS gesture): end the gesture without counting it as a tap.
+  const onPointerCancel = (e: React.PointerEvent) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size === 0) gesture.current = null;
+    else if (gesture.current) gesture.current.pinchDist = undefined;
+  };
+
   const onWheel = (e: React.WheelEvent) => {
     if (!m) return;
     apply({ ...tRef.current, zoom: tRef.current.zoom * Math.exp(-e.deltaY / 400) });
@@ -574,7 +727,7 @@ function SlotView(props: SlotViewProps) {
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
+      onPointerCancel={onPointerCancel}
       onWheel={onWheel}
     >
       {m?.kind === 'image' && <img src={m.url} style={mediaStyle} draggable={false} alt="" />}
