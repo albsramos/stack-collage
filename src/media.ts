@@ -1,4 +1,3 @@
-import { ALL_FORMATS, BlobSource, Input } from 'mediabunny';
 
 export interface Media {
   id: string;
@@ -40,6 +39,11 @@ export async function loadMedia(file: File): Promise<Media> {
     };
   }
 
+  // Only videos need mediabunny: load it on the first one rather than with the app.
+  const { ALL_FORMATS, BlobSource, Input } = await import('mediabunny').catch((e) => {
+    URL.revokeObjectURL(url);
+    throw e;
+  });
   const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
   try {
     const track = await input.getPrimaryVideoTrack();

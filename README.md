@@ -15,11 +15,12 @@ Everything runs on-device in the browser — nothing is uploaded.
 | | |
 |---|---|
 | Photos only | JPEG (q 0.95) at 1080 wide — or 2160 wide with **High · 2×** |
-| Any video | H.264 MP4, 30 fps, ~16 Mbps at 1080×1920 (×4 at 2×), AAC audio |
+| Any video | H.264 MP4, 30 fps, ~16 Mbps at 1080×1920 (~45 Mbps at 2×), AAC audio |
 
 - Video is encoded with WebCodecs via [Mediabunny](https://mediabunny.dev), frame by frame — no screen recording, so no dropped frames.
 - Each video is decoded straight to the size it's drawn at, so there's no blurry double-scaling.
 - Output length = the longest clip (max 60 s). Shorter clips loop.
+- The MP4 is written to the browser's private file storage (OPFS) as it's encoded, not held in memory, so long 2× exports don't get the tab killed on iPhone. It's deleted when you close the result. Browsers without OPFS write streams (Safari before 26) fall back to memory.
 - **Sound**: pick which video's audio to keep, or turn it off. If the browser can't encode AAC natively, a WASM AAC encoder is lazy-loaded.
 
 ## Develop
