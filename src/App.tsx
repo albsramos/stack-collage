@@ -16,6 +16,8 @@ import {
 import { loadMedia, releaseMedia, type Media } from './media';
 import type { ExportResult, SlotState } from './exporter';
 import { Orb } from './Orb';
+import { LOOKS, type Look } from './dither';
+import { DitherField, LookPreview, snapshot } from './Previews';
 
 // The exporter pulls in mediabunny (~200 KB gzipped). Load it when it's first needed, not on startup.
 const loadExporter = () => import('./exporter');
@@ -83,6 +85,21 @@ export default function App() {
   const [audioFrom, setAudioFrom] = useState<string | 'auto' | null>('auto');
   const [selected, setSelected] = useState<number | null>(null);
   const [choosing, setChoosing] = useState(false);
+  const [look, setLook] = useState<Look>('original');
+  // A still of the collage, taken when Export opens: the export sheet previews the look on it, and the busy
+  // screen assembles it dot by dot while the file renders.
+  const [snap, setSnap] = useState<HTMLCanvasElement | null>(null);
+  const exportStart = useRef(0);
+  // Start screen: the orb's light follows the finger; picking an option makes it react.
+  const orbAim = useRef<number | null>(null);
+  const orbBox = useRef<HTMLDivElement>(null);
+  const [orbKick, setOrbKick] = useState(0);
+  const aimAt = (e: React.PointerEvent) => {
+    const r = orbBox.current?.getBoundingClientRect();
+    if (!r) return;
+    orbAim.current = Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2));
+  };
+  const [justDone, setJustDone] = useState(0);
   const [exportedOnce, setExportedOnce] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
   const [busy, setBusy] = useState<{ progress: number; label: string } | null>(null);
@@ -378,8 +395,23 @@ export default function App() {
     const ac = new AbortController();
     abortRef.current = ac;
     setBusy({ progress: 0, label: anyVideo ? 'Rendering video…' : 'Rendering…' });
+    exportStart.current = performance.now();
     try {
       const { exportCollage } = await loadExporter();
+      // A photo renders in a blink. Give the collage a short moment to assemble itself first, so the export reads
+      // as something happening rather than a flicker (not under reduced motion).
+      if (!anyVideo && !prefersReducedMotion()) {
+        await new Promise<void>((done) => {
+          const t0 = performance.now();
+          const step = (now: number) => {
+            const p = Math.min(1, (now - t0) / 1100);
+            setBusy((b) => (b ? { ...b, progress: 1 - (1 - p) ** 2 } : b));
+            if (p < 1) requestAnimationFrame(step);
+            else done();
+          };
+          requestAnimationFrame(step);
+        });
+      }
       let shown = -1;
       const r = await exportCollage({
         format,
@@ -389,6 +421,7 @@ export default function App() {
         scale,
         audioFrom: resolvedAudio,
         maxDuration: MAX_DURATION,
+        look,
         signal: ac.signal,
         onProgress: (p, label) => {
           // Re-render only when the visible percentage or the label changes, not on every one of up to 1,800 frames.
@@ -399,6 +432,8 @@ export default function App() {
         },
       });
       setResult({ ...r, url: URL.createObjectURL(r.blob) });
+      setJustDone((n) => n + 1);
+      navigator.vibrate?.(12); // a light tap where supported (Android); iOS ignores it
       // r.warning is shown inside the result dialog: a toast would sit outside it, unreachable behind aria-modal.
     } catch (e) {
       if ((e as DOMException).name !== 'AbortError') {
@@ -424,15 +459,24 @@ export default function App() {
   // ---------- screens ----------
   if (step === 'start') {
     return (
-      <div className="screen start">
+      <div
+        className="screen start"
+        onPointerMove={aimAt}
+        onPointerDown={aimAt}
+        onPointerLeave={() => (orbAim.current = null)}
+      >
         <header className="brand">
-          <Orb size={24} grid={18} />
           <span>Stack</span>
           <span className="brand-meta">ON-DEVICE</span>
         </header>
         <div className="pick-head">
-          <h1 className="pick-title">Pick a template</h1>
-          <p className="pick-sub">Stack photos or videos into one frame.</p>
+          <div>
+            <h1 className="pick-title">Pick a template</h1>
+            <p className="pick-sub">Stack photos or videos into one frame.</p>
+          </div>
+          <div className="hero-orb" ref={orbBox}>
+            <Orb size={72} grid={30} intro aim={orbAim} kick={orbKick} />
+          </div>
         </div>
         <main className="pick">
           <div className="pick-row" role="group" aria-label="Number of cards">
@@ -440,7 +484,10 @@ export default function App() {
               <button
                 key={c}
                 className={pickCount === c ? 'option on' : 'option'}
-                onClick={() => setPickCount(c)}
+                onClick={() => {
+                  setPickCount(c);
+                  setOrbKick((n) => n + 1);
+                }}
                 aria-pressed={pickCount === c}
               >
                 <MiniLayout count={c} formatId={pickFormat ?? 'story'} />
@@ -453,7 +500,10 @@ export default function App() {
               <button
                 key={f}
                 className={pickFormat === f ? 'option on' : 'option'}
-                onClick={() => setPickFormat(f)}
+                onClick={() => {
+                  setPickFormat(f);
+                  setOrbKick((n) => n + 1);
+                }}
                 aria-pressed={pickFormat === f}
               >
                 <MiniLayout count={pickCount ?? (1 as Count)} formatId={f} />
@@ -506,7 +556,14 @@ export default function App() {
             {active.filter((s) => s.media).length}/{count}
           </span>
         </span>
-        <button className="primary" disabled={!filled || !!busy} onClick={() => setChoosing(true)}>
+        <button
+          className="primary"
+          disabled={!filled || !!busy}
+          onClick={() => {
+            setSnap(snapshot(format, layout, active, 540));
+            setChoosing(true);
+          }}
+        >
           Export
         </button>
       </div>
@@ -555,8 +612,14 @@ export default function App() {
                 max={5}
                 step={0.01}
                 value={sel.t.zoom}
-                onChange={(e) => setT(selected, { ...sel.t, zoom: +e.target.value })}
+                onChange={(e) => {
+                  const z = +e.target.value;
+                  setT(selected, { ...sel.t, zoom: z < 1.06 ? 1 : z }); // snaps to 1× near the end
+                }}
               />
+              <span className={sel.t.zoom === 1 ? 'zoom-val at-rest' : 'zoom-val'} aria-hidden="true">
+                {sel.t.zoom.toFixed(1)}×
+              </span>
               <button className="icon-btn" aria-label="Zoom in" onClick={() => nudge(selected, 0, 0, 1.15)}>
                 <Icon d={ICON_ZOOM_IN} />
               </button>
@@ -691,7 +754,15 @@ export default function App() {
           onEscape={() => setChoosing(false)}
           returnFocus={() => document.querySelector<HTMLElement>('.topbar .primary')}
         >
-          <p className="sheet-title">Export size</p>
+          <p className="sheet-title">Export</p>
+          {snap && <LookPreview source={snap} look={look} width={150} />}
+          <div className="seg look-seg" role="group" aria-label="Look">
+            {LOOKS.map((l) => (
+              <button key={l.id} className={look === l.id ? 'on' : ''} aria-pressed={look === l.id} onClick={() => setLook(l.id)}>
+                {l.label}
+              </button>
+            ))}
+          </div>
           {([1, 2] as const).map((k) => (
             <button key={k} className={exportedOnce && k === scale ? 'size-option last' : 'size-option'} onClick={() => doExport(k)}>
               <span className="size-name">
@@ -716,8 +787,13 @@ export default function App() {
           onEscape={anyVideo ? () => abortRef.current?.abort() : undefined}
           returnFocus={() => document.querySelector<HTMLElement>('[data-slot]')}
         >
-          <Orb size={88} grid={36} busy progress={busy.progress >= 0 ? busy.progress : null} />
+          {snap && busy.progress >= 0 ? (
+            <LookPreview source={snap} look={look} width={132} reveal={Math.max(0.02, busy.progress)} coarse />
+          ) : (
+            <Orb size={88} grid={36} busy />
+          )}
           <p role="status" className="busy-label">
+            {snap && busy.progress >= 0 && <Orb size={18} grid={14} busy />}
             {busy.label}
           </p>
           {busy.progress >= 0 && (
@@ -733,6 +809,7 @@ export default function App() {
                 <div style={{ width: `${Math.round(busy.progress * 100)}%` }} />
               </div>
               <p className="pct" aria-hidden="true">
+                {timeLeft(busy.progress, exportStart.current)}
                 {String(Math.round(busy.progress * 100)).padStart(2, '0')}%
               </p>
               {anyVideo && (
@@ -753,7 +830,9 @@ export default function App() {
           returnFocus={() => document.querySelector<HTMLElement>('.topbar .primary')}
         >
             <p className="result-head">
-              <Orb size={18} grid={14} />
+              <span className="done-orb">
+                <Orb size={18} grid={14} kick={justDone} />
+              </span>
               Ready
             </p>
             {result.blob.type.startsWith('video') ? (
@@ -797,6 +876,14 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+/** "about 8s left · " once there's enough progress to guess from; nothing before that. */
+function timeLeft(p: number, start: number) {
+  const elapsed = (performance.now() - start) / 1000;
+  if (p < 0.05 || p >= 1 || elapsed < 1.5) return '';
+  const left = (elapsed * (1 - p)) / p;
+  return left >= 90 ? `about ${Math.round(left / 60)} min left · ` : `about ${Math.max(1, Math.round(left))}s left · `;
 }
 
 function MiniLayout({ count, formatId }: { count: Count; formatId: FormatId }) {
@@ -1178,6 +1265,7 @@ function SlotView(props: SlotViewProps) {
       )}
       {!m && (
         <div className="placeholder" aria-hidden="true">
+          <DitherField />
           <span className="plus">+</span>
           <span className="slot-num">{String(index + 1).padStart(2, '0')}</span>
         </div>

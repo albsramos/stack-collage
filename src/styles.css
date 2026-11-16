@@ -120,7 +120,11 @@ button:not(:disabled):active { transform: scale(0.97); }
   font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
 }
 .brand-meta { margin-left: auto; font: 500 11px/1 var(--mono); color: var(--faint); letter-spacing: 0.02em; }
-.pick-head { width: 100%; max-width: 440px; margin: 28px auto 16px; animation: rise 0.5s var(--ease-out) both; }
+.pick-head {
+  width: 100%; max-width: 440px; margin: 20px auto 16px; display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; animation: rise 0.5s var(--ease-out) both;
+}
+.hero-orb { flex: none; width: 72px; height: 72px; }
 .pick-title { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.15; }
 .pick-sub { margin: 6px 0 0; font-size: 14px; color: var(--muted); letter-spacing: -0.005em; }
 .pick {
@@ -210,13 +214,14 @@ button.wide { width: 100%; padding: 13px; min-height: 46px; }
 .placeholder {
   position: absolute; inset: 3px; border-radius: 10px; background: var(--sunken);
   /* a dotted field: a quiet nod to the orb's grid */
-  background-image: radial-gradient(var(--line-strong) 1px, transparent 1.2px);
-  background-size: 12px 12px; background-position: center;
+  overflow: hidden;
   transition: background-color 0.2s, transform 0.16s var(--ease-out);
   display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; gap: 6px;
 }
 .slot.empty:active .placeholder { background-color: var(--sunken-2); transform: scale(0.985); }
 @media (hover: hover) { .slot.empty:hover .placeholder { background-color: var(--sunken-2); } }
+.dither-field { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--faint); opacity: 0.7; }
+.placeholder > :not(.dither-field) { position: relative; }
 .plus {
   width: 32px; height: 32px; border-radius: 999px; display: grid; place-items: center; font-size: 20px; line-height: 1;
   color: var(--text); background: var(--surface); box-shadow: var(--shadow-sm);
@@ -281,11 +286,23 @@ button.wide { width: 100%; padding: 13px; min-height: 46px; }
 }
 @media (hover: hover) { .icon-btn:hover { background: var(--sunken-2); } }
 .zoom-row { gap: 12px; }
+.zoom-val {
+  flex: none; min-width: 3.6ch; font: 500 12px/1 var(--mono); font-variant-numeric: tabular-nums; color: var(--text);
+  text-align: right; transition: color 0.2s;
+}
+.zoom-val.at-rest { color: var(--faint); }
 .slot-b .seg.move { flex: none; }
 .slot-b .done { flex: 1; height: 40px; min-width: 0; }
 
 /* Export: pick the size at the moment it matters */
 .sheet-title { font-size: 16px; font-weight: 600; letter-spacing: -0.015em; text-align: center; }
+.look-preview { display: block; border-radius: 8px; box-shadow: 0 0 0 1px var(--line); background: #000; }
+.look-seg { width: 100%; }
+.look-seg button { flex: 1 1 0; }
+.busy-label { display: flex; align-items: center; justify-content: center; gap: 8px; }
+/* Done: the orb gives one pulse as the result lands. */
+.done-orb { display: inline-flex; animation: done-pulse 0.6s var(--ease-out); }
+@keyframes done-pulse { 0% { transform: scale(0.6); } 45% { transform: scale(1.35); } 100% { transform: scale(1); } }
 .sheet .size-option {
   display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%; text-align: left; padding: 14px 16px;
   white-space: normal; border-radius: 12px;

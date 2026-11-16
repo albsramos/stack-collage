@@ -8,6 +8,10 @@ export interface OrbFrame {
   spin: number;
   /** 0–1 while something with a known length runs: the sphere fills in as it rises. */
   fill: number;
+  /** Light direction (screen angle, y down) to use instead of the resting sway, e.g. towards a finger. */
+  aim?: number | null;
+  /** 0–1: the dots fly in from scattered positions and settle into the sphere (an intro). 1 = settled. */
+  assemble?: number;
 }
 
 export interface Dot {
@@ -16,7 +20,7 @@ export interface Dot {
 }
 
 // 8×8 Bayer matrix: the classic ordered-dither thresholds, 0–63.
-const BAYER = [
+export const BAYER = [
   0, 32, 8, 40, 2, 34, 10, 42, 48, 16, 56, 24, 50, 18, 58, 26, 12, 44, 4, 36, 14, 46, 6, 38, 60, 28, 52, 20, 62, 30, 54,
   22, 3, 35, 11, 43, 1, 33, 9, 41, 51, 19, 59, 27, 49, 17, 57, 25, 15, 47, 7, 39, 13, 45, 5, 37, 63, 31, 55, 23, 61, 29,
   53, 21,
@@ -36,7 +40,8 @@ export function orbDots(grid: number, f: OrbFrame, dust = 1): Dot[] {
 
   // The light sits up and to the right. At rest it sways a little; busy, it travels all the way round.
   const base = -Math.PI / 4;
-  const theta = base + Math.sin(f.t * 0.6) * 0.18 * (1 - f.spin) + f.t * 2.2 * f.spin;
+  const rest = f.aim ?? base + Math.sin(f.t * 0.6) * 0.18;
+  const theta = rest * (1 - f.spin) + (base + f.t * 2.2) * f.spin;
   const lx = Math.cos(theta) * 0.62;
   const ly = Math.sin(theta) * 0.62;
   const lz = 0.48;
@@ -82,6 +87,20 @@ export function orbDots(grid: number, f: OrbFrame, dust = 1): Dot[] {
     const tick = Math.floor(f.t * (2 + f.spin * 4) + h3 * 10);
     if (hash(k, tick) < 0.18 + f.spin * 0.2) continue;
     add(Math.floor(cx + Math.cos(a) * d * R), Math.floor(cy + Math.sin(a) * d * R));
+  }
+
+  const as = f.assemble ?? 1;
+  if (as < 1) {
+    // Each dot starts somewhere random on the board and travels in, staggered, with an ease-out.
+    for (const p of out) {
+      const h = hash(p.i, p.j);
+      const k = Math.min(1, Math.max(0, as * 1.6 - h * 0.6));
+      const e = 1 - (1 - k) ** 3;
+      const sx = hash(p.i + 3.1, p.j) * grid;
+      const sy = hash(p.i, p.j + 5.7) * grid;
+      p.i = Math.round(sx + (p.i - sx) * e);
+      p.j = Math.round(sy + (p.j - sy) * e);
+    }
   }
   return out;
 }
