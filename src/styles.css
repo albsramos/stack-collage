@@ -297,8 +297,6 @@ button.wide { width: 100%; padding: 13px; min-height: 46px; }
 /* Export: pick the size at the moment it matters */
 .sheet-title { font-size: 16px; font-weight: 600; letter-spacing: -0.015em; text-align: center; }
 .look-preview { display: block; border-radius: 8px; box-shadow: 0 0 0 1px var(--line); background: #000; }
-.look-seg { width: 100%; }
-.look-seg button { flex: 1 1 0; }
 .busy-label { display: flex; align-items: center; justify-content: center; gap: 8px; }
 /* Done: the orb gives one pulse as the result lands. */
 .done-orb { display: inline-flex; animation: done-pulse 0.6s var(--ease-out); }

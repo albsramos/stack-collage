@@ -16,7 +16,6 @@ import {
 import { loadMedia, releaseMedia, type Media } from './media';
 import type { ExportResult, SlotState } from './exporter';
 import { Orb } from './Orb';
-import { LOOKS, type Look } from './dither';
 import { DitherField, LookPreview, snapshot } from './Previews';
 
 // The exporter pulls in mediabunny (~200 KB gzipped). Load it when it's first needed, not on startup.
@@ -85,8 +84,7 @@ export default function App() {
   const [audioFrom, setAudioFrom] = useState<string | 'auto' | null>('auto');
   const [selected, setSelected] = useState<number | null>(null);
   const [choosing, setChoosing] = useState(false);
-  const [look, setLook] = useState<Look>('original');
-  // A still of the collage, taken when Export opens: the export sheet previews the look on it, and the busy
+  // A still of the collage, taken when Export opens: the export sheet shows it, and the busy
   // screen assembles it dot by dot while the file renders.
   const [snap, setSnap] = useState<HTMLCanvasElement | null>(null);
   const exportStart = useRef(0);
@@ -421,7 +419,6 @@ export default function App() {
         scale,
         audioFrom: resolvedAudio,
         maxDuration: MAX_DURATION,
-        look,
         signal: ac.signal,
         onProgress: (p, label) => {
           // Re-render only when the visible percentage or the label changes, not on every one of up to 1,800 frames.
@@ -755,14 +752,7 @@ export default function App() {
           returnFocus={() => document.querySelector<HTMLElement>('.topbar .primary')}
         >
           <p className="sheet-title">Export</p>
-          {snap && <LookPreview source={snap} look={look} width={150} />}
-          <div className="seg look-seg" role="group" aria-label="Look">
-            {LOOKS.map((l) => (
-              <button key={l.id} className={look === l.id ? 'on' : ''} aria-pressed={look === l.id} onClick={() => setLook(l.id)}>
-                {l.label}
-              </button>
-            ))}
-          </div>
+          {snap && <LookPreview source={snap} width={150} />}
           {([1, 2] as const).map((k) => (
             <button key={k} className={exportedOnce && k === scale ? 'size-option last' : 'size-option'} onClick={() => doExport(k)}>
               <span className="size-name">
@@ -788,7 +778,7 @@ export default function App() {
           returnFocus={() => document.querySelector<HTMLElement>('[data-slot]')}
         >
           {snap && busy.progress >= 0 ? (
-            <LookPreview source={snap} look={look} width={132} reveal={Math.max(0.02, busy.progress)} coarse />
+            <LookPreview source={snap} width={132} reveal={Math.max(0.02, busy.progress)} />
           ) : (
             <Orb size={88} grid={36} busy />
           )}

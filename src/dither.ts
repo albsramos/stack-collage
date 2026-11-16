@@ -1,13 +1,7 @@
 import { BAYER } from './orb';
 
-/** How the collage is drawn: as is, as a blue ordered dither (the orb's look), or as a grid of coloured dots. */
-export type Look = 'original' | 'dither' | 'dots';
-
-export const LOOKS: { id: Look; label: string }[] = [
-  { id: 'original', label: 'Original' },
-  { id: 'dither', label: 'Dither' },
-  { id: 'dots', label: 'Dots' },
-];
+/** Dot styles: the orb's blue ordered dither, or dots in the picture's own colours. */
+export type DotStyle = 'dither' | 'dots';
 
 const INK = '#1f3dff';
 const PAPER = { dither: '#ffffff', dots: '#0a0a0b' };
@@ -40,7 +34,7 @@ export function ditherTo(
   src: CanvasImageSource,
   w: number,
   h: number,
-  look: Exclude<Look, 'original'>,
+  look: DotStyle,
   cell: number,
   reveal = 1,
 ) {
@@ -75,5 +69,3 @@ export function ditherTo(
   }
 }
 
-/** Dot spacing for a frame `w` px wide: 120 dots across, whatever the export size. */
-export const cellFor = (w: number) => w / 120;

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { BAYER } from './orb';
-import { cellFor, ditherTo, type Look } from './dither';
+import { ditherTo } from './dither';
 import { computeSlots, mediaRect, type Format, type LayoutOpts } from './layout';
 import type { SlotState } from './exporter';
 
@@ -37,10 +37,10 @@ export function snapshot(format: Format, layout: LayoutOpts, slots: SlotState[],
 }
 
 /**
- * The collage in a chosen look. `reveal` < 1 assembles it dot by dot in the orb's ordered pattern; `coarse` uses
- * bigger dots so the assembly reads at thumbnail size.
+ * A thumbnail of the collage. `reveal` < 1 assembles it dot by dot, in its own colours, in the orb's ordered
+ * pattern (the export screen); at 1 it's the picture itself.
  */
-export function LookPreview(p: { source: HTMLCanvasElement; look: Look; width: number; reveal?: number; coarse?: boolean }) {
+export function LookPreview(p: { source: HTMLCanvasElement; width: number; reveal?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const height = (p.width * p.source.height) / p.source.width;
   const reveal = p.reveal ?? 1;
@@ -50,14 +50,13 @@ export function LookPreview(p: { source: HTMLCanvasElement; look: Look; width: n
     c.width = Math.round(p.width * dpr);
     c.height = Math.round(height * dpr);
     const ctx = c.getContext('2d')!;
-    const cell = p.coarse ? c.width / 44 : cellFor(c.width);
-    if (p.look === 'original' && reveal >= 1) {
+    if (reveal >= 1) {
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(p.source, 0, 0, c.width, c.height);
     } else {
-      ditherTo(ctx, p.source, c.width, c.height, p.look === 'original' ? 'dots' : p.look, cell, reveal);
+      ditherTo(ctx, p.source, c.width, c.height, 'dots', c.width / 44, reveal);
     }
-  }, [p.source, p.look, p.width, height, reveal, p.coarse]);
+  }, [p.source, p.width, height, reveal]);
   return <canvas ref={ref} className="look-preview" style={{ width: p.width, height }} aria-hidden="true" />;
 }
 

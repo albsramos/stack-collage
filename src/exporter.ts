@@ -20,7 +20,6 @@ import {
 } from 'mediabunny';
 import { clamp, computeSlots, mediaRect, type Format, type LayoutOpts, type Rect, type Transform } from './layout';
 import type { Media } from './media';
-import { cellFor, ditherTo, type Look } from './dither';
 
 export interface SlotState {
   media: Media | null;
@@ -35,8 +34,6 @@ export interface ExportOpts {
   scale: 1 | 2; // 1 = 1080 wide (Instagram native), 2 = 2160 wide
   audioFrom: number | null; // slot index or null for silent
   maxDuration: number; // seconds
-  /** Draw the result as a dither or dot grid instead of as is. */
-  look?: Look;
   /** 0…1, plus a label when the phase changes (e.g. "Finishing…"). */
   onProgress?: (p: number, label?: string) => void;
   signal?: AbortSignal;
@@ -137,12 +134,8 @@ async function exportImage(o: ExportOpts): Promise<ExportResult> {
   const H = o.format.h * o.scale;
   const { c, ctx } = makeCanvas(W, H);
   const rects = computeSlots(o.format, o.layout);
-  const look = o.look && o.look !== 'original' ? o.look : null;
-  // A styled export composes the collage off-screen, then redraws it as dots onto the output canvas.
-  const comp = look ? makeCanvas(W, H) : { c, ctx };
-  drawBackground(comp.ctx, o);
-  drawSlots(comp.ctx, o, rects, o.slots.map(photoSource));
-  if (look) ditherTo(ctx, comp.c, W, H, look, cellFor(W));
+  drawBackground(ctx, o);
+  drawSlots(ctx, o, rects, o.slots.map(photoSource));
   o.onProgress?.(1);
   const blob = await new Promise<Blob>((res, rej) =>
     c.toBlob((b) => (b ? res(b) : rej(new Error('Could not encode image'))), 'image/jpeg', 0.95),
@@ -248,11 +241,7 @@ async function encodeVideo(
 ): Promise<{ warning?: string }> {
   const k = o.scale;
   const rects = computeSlots(o.format, o.layout);
-  const { c, ctx: outCtx } = makeCanvas(o.format.w * k, o.format.h * k);
-  const look = o.look && o.look !== 'original' ? o.look : null;
-  // Styled: slots are composed on their own canvas (redrawn only where video changes, as usual), and each frame is
-  // re-dotted from it onto the encoder's canvas. Dotting the encoder canvas in place would re-dot old dots.
-  const ctx = look ? makeCanvas(c.width, c.height).ctx : outCtx;
+  const { c, ctx } = makeCanvas(o.format.w * k, o.format.h * k);
   const output = new Output({ format: new Mp4OutputFormat({ fastStart: sink.fastStart }), target: sink.target });
   const videoSource = new CanvasSource(c, {
     codec: videoCodec,
@@ -325,7 +314,6 @@ async function encodeVideo(
         checkAborted();
         const frames = await Promise.all(o.slots.map((_, i) => feeds[i]?.next() ?? null));
         drawSlots(ctx, o, rects, frames, isVideo, true);
-        if (look) ditherTo(outCtx, ctx.canvas, c.width, c.height, look, cellFor(c.width));
         await videoSource.add(f / FPS, 1 / FPS);
         videoDone = (f + 1) / total;
         report();
