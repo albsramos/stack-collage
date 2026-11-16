@@ -116,11 +116,11 @@ button:not(:disabled):active { transform: scale(0.97); }
     max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
 }
 .install-link {
-  flex: none; align-self: center; margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; height: 36px;
-  padding: 0 12px; border: 0; border-radius: 999px; background: none; color: var(--accent-text); font-size: 13px;
-  font-weight: 600; letter-spacing: -0.005em; cursor: pointer; animation: rise 0.5s 0.16s var(--ease-out) both;
+  flex: none; align-self: center; margin-top: 12px; display: inline-flex; align-items: center; gap: 6px; height: 32px;
+  padding: 0 12px; border: 0; border-radius: 999px; background: var(--accent-soft); color: var(--accent-text);
+  font-size: 12px; font-weight: 600; letter-spacing: -0.005em; cursor: pointer; animation: rise 0.5s 0.16s var(--ease-out) both;
 }
-@media (hover: hover) { .install-link:hover { background: var(--accent-soft); } }
+@media (hover: hover) { .install-link:hover { background: var(--sunken-2); } }
 .pick-head {
   width: 100%; max-width: 440px; margin: 8px auto 16px; display: flex; align-items: center; justify-content: space-between;
   gap: 16px; animation: rise 0.5s var(--ease-out) both;
