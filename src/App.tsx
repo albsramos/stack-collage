@@ -359,6 +359,15 @@ export default function App() {
     if (previewSound && soundId !== heardId.current) setPreviewSound(false);
   }, [previewSound, soundId]);
 
+  // One message at a time in the panel's fixed hint line, most important first.
+  const hint = active.some((s) => s.media?.audioUnsupported)
+    ? "This browser can't read the sound in some clips, so they'll export silent."
+    : !hasSelected
+      ? 'Tap a photo or video to move, zoom, reorder or remove it.'
+      : anyVideo
+        ? `Shorter clips loop to match the longest (max ${MAX_DURATION}s).`
+        : null;
+
   const doExport = async () => {
     setSelected(null);
     const ac = new AbortController();
@@ -510,24 +519,12 @@ export default function App() {
         onRemove={removeSlot}
       />
 
+      {/* Fixed height in both modes (two 48px slots), so the frame above never resizes as controls come and go. */}
       <div className="panel">
         {sel && selected !== null ? (
-          <div className="tools">
-            <div className="row">
-              <label htmlFor="zoom">Zoom</label>
-              <input
-                id="zoom"
-                type="range"
-                min={1}
-                max={5}
-                step={0.01}
-                value={sel.t.zoom}
-                onChange={(e) => setT(selected, { ...sel.t, zoom: +e.target.value })}
-              />
-            </div>
-            <div className="row">
-              <span className="label" id="position-label">Position</span>
-              <div className="nudge" role="group" aria-labelledby="position-label">
+          <div className="tools" key="edit">
+            <div className="slot-a">
+              <div className="nudge" role="group" aria-label="Position">
                 <button aria-label="Move picture left" onClick={() => nudge(selected, -0.1, 0)}>
                   <Icon d={ICON_LEFT} />
                 </button>
@@ -541,95 +538,109 @@ export default function App() {
                   <Icon d={ICON_RIGHT} />
                 </button>
               </div>
+              <label htmlFor="zoom" className="visually-hidden">
+                Zoom
+              </label>
+              <input
+                id="zoom"
+                type="range"
+                min={1}
+                max={5}
+                step={0.01}
+                value={sel.t.zoom}
+                onChange={(e) => setT(selected, { ...sel.t, zoom: +e.target.value })}
+              />
             </div>
-            <div className="buttons">
+            <div className="slot-b buttons">
               <button onClick={() => openPicker(selected)}>Replace</button>
               <button onClick={() => setT(selected, { ...IDENTITY })}>Reset</button>
               <button className="primary" onClick={deselect}>
                 Done
               </button>
             </div>
-            <p className="hint">Drag to reposition · pinch to zoom · arrow keys and +/− work too</p>
+            {/* Read out with the selected slot (aria-describedby) instead of taking a line on screen. */}
+            <p id="gesture-hint" className="visually-hidden">
+              Drag to reposition, pinch to zoom. Arrow keys and plus or minus work too.
+            </p>
           </div>
         ) : (
-          <div className="tools">
-            {!filled && (
-              <button className="primary wide" onClick={() => openPicker('fill')}>
-                Add photos or videos
-              </button>
-            )}
-            {!filled && (
-              <p className="hint">
-                Fill all {count} slots to export · {active.filter((s) => s.media).length} of {count} done
-              </p>
-            )}
-            <div className="row end">
-              <span className="label" id="size-label">Size</span>
-              <div className="chips" role="group" aria-labelledby="size-label">
-                <button className={scale === 1 ? 'chip on' : 'chip'} aria-pressed={scale === 1} onClick={() => setScale(1)}>
-                  Standard
+          <div className="tools" key="main">
+            <div className="slot-a">
+              <div className="seg" role="group" aria-label="Export size">
+                <button className={scale === 1 ? 'on' : ''} aria-pressed={scale === 1} aria-label="Standard size" onClick={() => setScale(1)}>
+                  1×
                 </button>
-                <button className={scale === 2 ? 'chip on' : 'chip'} aria-pressed={scale === 2} onClick={() => setScale(2)}>
-                  High · 2×
+                <button className={scale === 2 ? 'on' : ''} aria-pressed={scale === 2} aria-label="High size, 2×" onClick={() => setScale(2)}>
+                  2×
                 </button>
               </div>
-            </div>
-            {anyVideo && (
-              <div className="row end">
-                <span className="label" id="sound-label">Sound</span>
-                <div className="chips" role="group" aria-labelledby="sound-label">
+              {anyVideo && (
+                <div className="seg pop-group" role="group" aria-label="Export sound">
                   <button
-                    className={resolvedAudio === null ? 'chip on' : 'chip'}
+                    className={resolvedAudio === null ? 'on' : ''}
                     aria-pressed={resolvedAudio === null}
+                    aria-label="No sound"
                     onClick={() => {
                       setAudioFrom(null);
                       setPreviewSound(false);
                     }}
                   >
-                    Off
+                    <Icon d={ICON_MUTED} />
                   </button>
                   {active.map((s, i) =>
                     s.media?.kind === 'video' && s.media.hasAudio ? (
                       <button
-                        key={i}
-                        className={resolvedAudio === i ? 'chip on' : 'chip'}
+                        key={s.media.id}
+                        className={resolvedAudio === i ? 'on pop' : 'pop'}
                         aria-pressed={resolvedAudio === i}
+                        aria-label={`Sound from video ${i + 1}`}
                         onClick={() => {
                           setAudioFrom(s.media!.id);
                           // Switching which clip is heard can't unmute it outside a tap on iOS: start over muted.
                           setPreviewSound(false);
                         }}
                       >
-                        Video {i + 1}
+                        {i + 1}
                       </button>
                     ) : null,
                   )}
                 </div>
-              </div>
-            )}
-            {anyVideo && (
-              <div className="row end">
-                <span className="label" id="preview-label">Preview</span>
-                <div className="chips" role="group" aria-labelledby="preview-label">
-                  {/* The label says the state, so no aria-pressed: a toggle shouldn't change both. */}
-                  <button className="chip" onClick={togglePlaying}>
-                    {playing ? 'Pause' : 'Play'}
+              )}
+              {anyVideo && (
+                <div className="seg pop-group" role="group" aria-label="Preview">
+                  {/* The name says the state, so no aria-pressed: a toggle shouldn't change both. */}
+                  <button aria-label={playing ? 'Pause preview' : 'Play preview'} onClick={togglePlaying}>
+                    <Icon d={playing ? ICON_PAUSE : ICON_PLAY} />
                   </button>
                   {resolvedAudio !== null && (
-                    <button className={previewSound ? 'chip on' : 'chip'} aria-pressed={previewSound} onClick={toggleSound}>
-                      With sound
+                    <button
+                      className={previewSound ? 'on pop' : 'pop'}
+                      aria-pressed={previewSound}
+                      aria-label="Preview with sound"
+                      onClick={toggleSound}
+                    >
+                      <Icon d={ICON_HEADPHONES} />
                     </button>
                   )}
                 </div>
-              </div>
-            )}
-            {!hasSelected && active.some((s) => s.media) && (
-              <p className="hint">Tap a photo or video to move, zoom, reorder or remove it.</p>
-            )}
-            {active.some((s) => s.media?.audioUnsupported) && (
-              <p className="hint">This browser can't read the sound in some clips, so they'll export silent.</p>
-            )}
-            {anyVideo && <p className="hint">Shorter clips loop to match the longest (max {MAX_DURATION}s).</p>}
+              )}
+            </div>
+            <div className="slot-b">
+              {!filled ? (
+                <button className="primary wide add" onClick={() => openPicker('fill')}>
+                  Add photos or videos
+                  <span className="count" aria-label={`, ${active.filter((s) => s.media).length} of ${count} added`}>
+                    {active.filter((s) => s.media).length}/{count}
+                  </span>
+                </button>
+              ) : (
+                hint && (
+                  <p className="hint" key={hint}>
+                    {hint}
+                  </p>
+                )
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -895,6 +906,10 @@ const ICON_UP = 'M12 19V5M5 12l7-7 7 7';
 const ICON_DOWN = 'M12 5v14M19 12l-7 7-7-7';
 const ICON_LEFT = 'M19 12H5M12 19l-7-7 7-7';
 const ICON_RIGHT = 'M5 12h14M12 5l7 7-7 7';
+const ICON_PLAY = 'M7 4.5l12 7.5-12 7.5z';
+const ICON_PAUSE = 'M8 5v14M16 5v14';
+const ICON_MUTED = 'M11 5L6 9H3v6h3l5 4zM22 9l-6 6M16 9l6 6';
+const ICON_HEADPHONES = 'M3 18v-6a9 9 0 0118 0v6M21 19a2 2 0 01-2 2h-1v-6h3zM3 19a2 2 0 002 2h1v-6H3z';
 const ICON_TRASH = 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6';
 
 function slotLabel(index: number, count: number, m: SlotState['media'], selected: boolean) {
@@ -1100,6 +1115,7 @@ function SlotView(props: SlotViewProps) {
         data-slot={index}
         aria-label={slotLabel(index, count, m, selected)}
         aria-keyshortcuts={m && selected ? 'ArrowLeft ArrowRight ArrowUp ArrowDown Plus - Escape' : undefined}
+        aria-describedby={m && selected ? 'gesture-hint' : undefined}
         onKeyDown={onKeyDown}
       />
       {m && selected && (
