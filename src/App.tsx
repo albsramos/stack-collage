@@ -1084,6 +1084,8 @@ function Stage(p: StageProps) {
       const r = entry.contentRect;
       const s = Math.min(r.width / f.w, r.height / f.h);
       setSize({ w: f.w * s, h: f.h * s });
+      // The panel's controls line up with the frame's edges, not the screen's.
+      el.closest<HTMLElement>('.editor')?.style.setProperty('--stage-w', `${f.w * s}px`);
     });
     ro.observe(el);
     return () => ro.disconnect();

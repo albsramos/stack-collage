@@ -246,7 +246,13 @@ button.wide { width: 100%; padding: 13px; min-height: 46px; }
 }
 /* Two fixed 48px slots in both modes (settings / editing a slot): the panel never changes height, so the
    frame above it never resizes. Things that come and go do so inside these slots. */
-.tools { padding: 14px 16px 16px; display: grid; grid-template-rows: 48px 48px; gap: 12px; animation: swap 0.25s var(--ease-out); }
+.tools {
+  padding: 14px 16px 16px; display: grid; grid-template-rows: 48px 48px; gap: 12px; animation: swap 0.25s var(--ease-out);
+  /* as wide as the frame above (plus this padding), so buttons never reach past its edges */
+  width: 100%; max-width: calc(var(--stage-w, 100%) + 32px); margin-inline: auto; container-type: inline-size;
+}
+/* A narrow frame (9:16): drop the Move label so the edit row still fits; the arrows say it. */
+@container (max-width: 340px) { .slot-b .seg.move .seg-label { display: none; } }
 .slot-a, .slot-b { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; }
 .slot-a input[type='range'] { flex: 1; min-width: 0; accent-color: var(--accent); }
 .slot-b > * { animation: fade 0.15s ease-out; }
@@ -424,7 +430,7 @@ html, body { transition: background-color 0.2s; }
   }
   .pick { flex-direction: row; }
   .pick-head { margin: 12px auto 10px; }
-  .editor .tools { grid-template-rows: auto auto; }
+  .editor .tools { grid-template-rows: auto auto; max-width: none; }
   .editor .slot-a { flex-wrap: wrap; }
 }
 
