@@ -23,16 +23,25 @@
 
 <table>
   <tr>
-    <td align="center" width="33%"><img src="docs/start.gif" width="240" alt="Start screen: the orb forms from dots and reacts to each pick"></td>
-    <td align="center" width="33%"><img src="docs/edit.gif" width="240" alt="Editor: three photos added, one selected and zoomed"></td>
-    <td align="center" width="33%"><img src="docs/export.gif" width="240" alt="Export: the collage assembles from dots, then Ready"></td>
+    <td align="center" width="33%"><img src="docs/start.png" width="240" alt="Start screen: the orb forms from dots and reacts to each pick"></td>
+    <td align="center" width="33%"><img src="docs/edit.png" width="240" alt="Editor: two photos and a video added, then the video trimmed from 2.5 to 7.5 seconds"></td>
+    <td align="center" width="33%"><img src="docs/export.png" width="240" alt="Export: the collage renders dot by dot, then Ready"></td>
   </tr>
   <tr>
     <td valign="top"><b>Pick a template.</b> Choose 2 or 3 cards and a 9:16 or 3:4 frame. The orb forms itself from dots, follows your finger, and reacts differently every time you tap.</td>
-    <td valign="top"><b>Fill it.</b> Tap a slot or add several at once. Drag to reposition, pinch to zoom, and reorder or swap any slot. Zoom shows its exact level and snaps back to 1×.</td>
+    <td valign="top"><b>Fill it.</b> Tap a slot or add several at once. Drag to reposition, pinch to zoom, and reorder or swap any slot. Tap ✂ on a video to keep just the part you want.</td>
     <td valign="top"><b>Export.</b> Your collage assembles itself dot by dot while it renders, then the orb pulses when it's ready. Save goes straight to the share sheet.</td>
   </tr>
 </table>
+
+## Trim a clip
+
+Select a video and tap ✂ in its action bar, or tap its length in the corner. The bottom panel becomes a filmstrip:
+
+- Drag the blue handles to set where the clip starts and ends. The slot shows the frame under your finger.
+- Drag the part between them to slide it along the clip without changing its length.
+- When you let go, the slot loops just that part. Times snap to 0.1 s, and a clip can't be shorter than 0.5 s.
+- A trimmed clip's length turns blue with a ✂. The trim stays with the clip when you move it, and ↺ brings back the whole clip.
 
 ## The orb
 
@@ -60,11 +69,11 @@ Stack is a web app you can install. It opens full screen, works offline, and kee
 | | |
 |---|---|
 | Photos only | JPEG (quality 0.95) at 1080 wide, or 2160 wide with **High quality** |
-| Any video | H.264 MP4, 30 fps, ~16 Mbps at 1080×1920 (~45 Mbps at 2×), AAC audio |
+| Any video | MP4, 30 fps, ~16 Mbps at 1080×1920 (~45 Mbps at 2×), AAC audio. H.264, or HEVC where the browser can't encode H.264 at that size |
 
 - Video is encoded frame by frame with WebCodecs via [Mediabunny](https://mediabunny.dev). There's no screen recording, so no dropped frames.
 - Each video is decoded straight to the size it's drawn at, so there's no blurry double scaling.
-- The output is as long as the longest clip, up to 60 s. Shorter clips loop.
+- The output is as long as the longest clip (after trimming), up to 60 s. Shorter clips loop.
 - The MP4 is written to the browser's private file storage (OPFS) as it's encoded, not held in memory, so long 2× exports don't get the tab killed on iPhone. It's deleted when you close the result. Browsers without OPFS write streams (Safari before 26) fall back to memory.
 - **Sound:** pick which video's audio to keep, or turn it off. If the browser can't encode AAC natively, a WASM AAC encoder is loaded on demand.
 
@@ -75,6 +84,7 @@ npm install
 npm run dev      # http://localhost:5173, also on your LAN for testing on a phone
 npm run build
 npm run icons    # regenerate public/icons from the orb
+scripts/demos/run.sh  # re-record the "How it feels" PNGs (needs Playwright, Python with Pillow and NumPy, ffmpeg)
 ```
 
 Built with Vite, React and TypeScript, `vite-plugin-pwa` for offline and install, and `mediabunny` for video decode and encode.
@@ -85,6 +95,8 @@ Built with Vite, React and TypeScript, `vite-plugin-pwa` for offline and install
 | `src/layout.ts` | format sizes, slot geometry, pan and zoom math, shared by preview and export so the preview is exact |
 | `src/media.ts` | loading photos and videos (dimensions, rotation, duration, audio) |
 | `src/exporter.ts` | canvas rendering, MP4 encoding, save and share |
+| `src/Trimmer.tsx`, `src/trim.ts` | the clip trimmer, and the trim math shared with export |
+| `src/stale.ts` | loading code split out of the main bundle, with a clear message if the app needs a reload |
 | `src/orb.ts` | the orb's drawing code: dither, light, dust |
 | `src/Orb.tsx` | the live orb: animation, reactions, intro, finger tracking |
 | `src/Previews.tsx` | the collage snapshot, the dot-by-dot export reveal, the empty-slot dot field |

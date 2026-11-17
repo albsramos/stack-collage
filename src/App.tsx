@@ -418,17 +418,18 @@ export default function App() {
   };
   const soundId = resolvedAudio !== null ? active[resolvedAudio].media?.id : undefined;
   const heardId = useRef<string | undefined>(undefined);
-  const toggleSound = () => {
-    const next = !previewSound;
-    heardId.current = next ? soundId : undefined;
+  /** Hear one clip in the preview (or none). Must run inside the tap: iOS only unmutes media in a user gesture. */
+  const hear = (id: string | undefined) => {
+    heardId.current = id;
     for (const v of previewVideos()) {
-      if (next) v.currentTime = +(v.dataset.from ?? 0); // restart together (at each clip's trim), like the export
-      v.muted = !(next && v.dataset.mediaId === soundId);
-      v.play().catch(() => {});
+      if (id) v.currentTime = +(v.dataset.from ?? 0); // restart together (at each clip's trim), like the export
+      v.muted = v.dataset.mediaId !== id;
+      if (id || playing) v.play().catch(() => {});
     }
-    setPreviewSound(next);
-    setPlaying(true);
+    setPreviewSound(!!id);
+    if (id) setPlaying(true);
   };
+  const toggleSound = () => hear(previewSound ? undefined : soundId);
 
   // The clip being heard changed without a tap (it was removed, replaced, or another came back by Undo):
   // iOS won't unmute the new one from an effect, so turn preview sound off rather than show it on but silent.
@@ -761,7 +762,7 @@ export default function App() {
                     aria-label="No sound"
                     onClick={() => {
                       setAudioFrom(null);
-                      setPreviewSound(false);
+                      hear(undefined);
                     }}
                   >
                     <Icon d={ICON_MUTED} />
@@ -775,8 +776,7 @@ export default function App() {
                         aria-label={`Sound from video ${i + 1}`}
                         onClick={() => {
                           setAudioFrom(s.media!.id);
-                          // Switching which clip is heard can't unmute it outside a tap on iOS: start over muted.
-                          setPreviewSound(false);
+                          hear(s.media!.id); // picking a clip's sound plays it in the preview too
                         }}
                       >
                         {i + 1}
@@ -795,10 +795,10 @@ export default function App() {
                     <button
                       className={previewSound ? 'on pop' : 'pop'}
                       aria-pressed={previewSound}
-                      aria-label="Preview with sound"
+                      aria-label="Sound in preview"
                       onClick={toggleSound}
                     >
-                      <Icon d={ICON_HEADPHONES} />
+                      <Icon d={previewSound ? ICON_SPEAKER : ICON_MUTED} />
                     </button>
                   )}
                 </div>
@@ -1228,7 +1228,7 @@ const ICON_RIGHT = 'M5 12h14M12 5l7 7-7 7';
 const ICON_PLAY = 'M7 4.5l12 7.5-12 7.5z';
 const ICON_PAUSE = 'M8 5v14M16 5v14';
 const ICON_MUTED = 'M11 5L6 9H3v6h3l5 4zM22 9l-6 6M16 9l6 6';
-const ICON_HEADPHONES = 'M3 18v-6a9 9 0 0118 0v6M21 19a2 2 0 01-2 2h-1v-6h3zM3 19a2 2 0 002 2h1v-6H3z';
+const ICON_SPEAKER = 'M11 5L6 9H3v6h3l5 4zM15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13';
 const ICON_CHEV_LEFT = 'M15 6l-6 6 6 6';
 const ICON_CHEV_RIGHT = 'M9 6l6 6-6 6';
 const ICON_CHEV_UP = 'M6 15l6-6 6 6';
