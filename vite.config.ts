@@ -12,7 +12,10 @@ export default defineConfig({
   plugins: [
     react(),
     !artifact && VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt', not 'autoUpdate': a new service worker waits until the app is closed instead of taking over the
+      // open page and deleting the files it still lazy-loads (the exporter, mediabunny), which broke the first
+      // export or video after every deploy. The next launch gets the new version.
+      registerType: 'prompt',
       includeAssets: ['icons/apple-touch-icon.png'],
       manifest: {
         name: 'Stack — photo & video collages',
@@ -33,6 +36,8 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg,webmanifest}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        skipWaiting: false,
+        clientsClaim: false,
       },
     }),
   ],

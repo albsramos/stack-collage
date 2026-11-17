@@ -1,3 +1,4 @@
+import { importFresh } from './stale';
 
 export interface Media {
   id: string;
@@ -40,7 +41,7 @@ export async function loadMedia(file: File): Promise<Media> {
   }
 
   // Only videos need mediabunny: load it on the first one rather than with the app.
-  const { ALL_FORMATS, BlobSource, Input } = await import('mediabunny').catch((e) => {
+  const { ALL_FORMATS, BlobSource, Input } = await importFresh(() => import('mediabunny')).catch((e) => {
     URL.revokeObjectURL(url);
     throw e;
   });

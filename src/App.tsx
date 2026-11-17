@@ -13,27 +13,23 @@ import {
   type Rect,
   type Transform,
 } from './layout';
+import { STALE_APP, importFresh, isStale, reloadToUpdate } from './stale';
 import { loadMedia, releaseMedia, type Media } from './media';
 import type { ExportResult, SlotState } from './exporter';
 import { Orb } from './Orb';
 import { DitherField, LookPreview, snapshot } from './Previews';
 
-// The exporter pulls in mediabunny (~200 KB gzipped). It's kept out of the startup bundle, but fetched in the
-// background soon after the app opens (see warmExporter) rather than at the moment of export: once a new version is
-// deployed, the service worker takes over this page and deletes the old files, so an exporter fetched only on the
-// first tap of Export would 404 ("Importing a module script failed"). Fetched early, it's already in memory.
+// The exporter pulls in mediabunny (~200 KB gzipped). It's kept out of the startup bundle but loaded right after
+// startup (see warmExporter), so Export never waits on it. One shared promise; a failure resets it for a retry.
 let exporter: Promise<typeof import('./exporter')> | null = null;
 const loadExporter = () =>
-  (exporter ??= import('./exporter').catch((e) => {
-    exporter = null; // let a later call try again
-    console.error(e);
-    throw new Error(STALE_APP);
+  (exporter ??= importFresh(() => import('./exporter')).catch((e) => {
+    exporter = null;
+    throw e;
   }));
-const STALE_APP = 'Stack was updated in the background and needs a reload to export. Sorry!';
 const warmExporter = () => {
-  const go = () => void loadExporter().catch(() => {});
-  if ('requestIdleCallback' in window) requestIdleCallback(go, { timeout: 3000 });
-  else setTimeout(go, 1500);
+  const id = setTimeout(() => void loadExporter().catch(() => {}), 300);
+  return () => clearTimeout(id);
 };
 const hasVideo = (slots: SlotState[]) => slots.some((s) => s.media?.kind === 'video');
 
@@ -163,6 +159,10 @@ export default function App() {
 
   const showToast = useCallback((t: Toast | string) => setToast(typeof t === 'string' ? { msg: t } : t), []);
   const showError = useCallback((msg: string) => showToast({ msg, error: true }), [showToast]);
+  const showStale = useCallback(
+    () => showToast({ msg: STALE_APP, error: true, action: { label: 'Reload', run: () => void reloadToUpdate() } }),
+    [showToast],
+  );
 
   // Toasts hide themselves (errors excepted), but not while the pointer or keyboard focus is on them: someone
   // tabbing or swiping to Undo must be able to reach it.
@@ -253,6 +253,7 @@ export default function App() {
     setToast(null);
     setBusy({ progress: -1, label: 'Opening…' });
     const errors: string[] = [];
+    let stale = false;
     for (let j = 0; j < list.length; j++) {
       try {
         const m = await loadMedia(list[j]);
@@ -261,11 +262,13 @@ export default function App() {
         releaseMedia(slotsRef.current[idx].media);
         setSlots((prev) => prev.map((s, k) => (k === idx ? { media: m, t: { ...IDENTITY } } : s)));
       } catch (e) {
-        errors.push((e as Error).message);
+        if (isStale(e)) stale = true;
+        else errors.push((e as Error).message);
       }
     }
     setBusy(null);
-    if (errors.length) showError(errors.join(' '));
+    if (stale) showStale();
+    else if (errors.length) showError(errors.join(' '));
     else if (files.length > list.length) {
       showToast(`Added ${list.length} of ${files.length}: only ${list.length} slot${list.length === 1 ? ' was' : 's were'} empty.`);
     }
@@ -472,9 +475,8 @@ export default function App() {
     } catch (e) {
       if ((e as DOMException).name !== 'AbortError') {
         console.error(e);
-        const msg = (e as Error).message;
-        if (msg === STALE_APP) showToast({ msg, error: true, action: { label: 'Reload', run: () => location.reload() } });
-        else showError(`Export failed: ${msg}`);
+        if (isStale(e)) showStale();
+        else showError(`Export failed: ${(e as Error).message}`);
       }
     } finally {
       setBusy(null);
