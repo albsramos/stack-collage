@@ -15,6 +15,8 @@ import {
 } from './layout';
 import { STALE_APP, importFresh, isStale, reloadToUpdate } from './stale';
 import { loadMedia, releaseMedia, type Media } from './media';
+import { Trimmer } from './Trimmer';
+import { clipLength, isTrimmed, trimOf, type Trim } from './trim';
 import type { ExportResult, SlotState } from './exporter';
 import { Orb } from './Orb';
 import { DitherField, LookPreview, snapshot } from './Previews';
@@ -94,6 +96,9 @@ export default function App() {
   // Which clip's sound to use: a media id (so the choice follows the clip when slots are reordered), 'auto', or off.
   const [audioFrom, setAudioFrom] = useState<string | 'auto' | null>('auto');
   const [selected, setSelected] = useState<number | null>(null);
+  // The clip whose trimmer is open (by id, so it stays open when the clip moves), and the time shown mid-drag.
+  const [trimId, setTrimId] = useState<string | null>(null);
+  const [scrub, setScrub] = useState<number | null>(null);
   const [choosing, setChoosing] = useState(false);
   // A still of the collage, taken when Export opens: the export sheet shows it, and the busy
   // screen assembles it dot by dot while the file renders.
@@ -277,6 +282,21 @@ export default function App() {
   // ---------- slot ops ----------
   const setT = (i: number, t: Transform) =>
     setSlots((prev) => prev.map((s, k) => (k === i ? { ...s, t } : s)));
+  const setTrim = (i: number, trim: Trim | undefined) =>
+    setSlots((prev) => prev.map((s, k) => (k === i ? { ...s, trim } : s)));
+  const openTrim = (i: number) => {
+    const id = slots[i]?.media?.id;
+    if (!id) return;
+    setSelected(i);
+    setHasSelected(true);
+    setTrimId(id);
+  };
+  // Selecting another clip (or none) closes the trimmer.
+  const selectedId = selected !== null ? slots[selected]?.media?.id : undefined;
+  useEffect(() => {
+    if (trimId && selectedId !== trimId) setTrimId(null);
+  }, [selectedId, trimId]);
+  useEffect(() => setScrub(null), [trimId]);
 
   // A removed clip is kept while its "Removed · Undo" toast shows; its memory is released once the toast goes.
   const undoRef = useRef<{ index: number; slot: SlotState } | null>(null);
@@ -402,7 +422,7 @@ export default function App() {
     const next = !previewSound;
     heardId.current = next ? soundId : undefined;
     for (const v of previewVideos()) {
-      if (next) v.currentTime = 0; // restart together, like the export
+      if (next) v.currentTime = +(v.dataset.from ?? 0); // restart together (at each clip's trim), like the export
       v.muted = !(next && v.dataset.mediaId === soundId);
       v.play().catch(() => {});
     }
@@ -646,11 +666,24 @@ export default function App() {
         onMove={moveSlot}
         onRemove={removeSlot}
         onReplace={(i) => openPicker(i)}
+        onTrim={openTrim}
+        trimmingId={trimId}
+        scrub={scrub}
       />
 
       {/* Fixed height in both modes (two 48px slots), so the frame above never resizes as controls come and go. */}
       <div className="panel">
-        {sel && selected !== null ? (
+        {sel?.media?.kind === 'video' && selected !== null && sel.media.id === trimId ? (
+          <div className="tools" key="trim">
+            <Trimmer
+              media={sel.media}
+              trim={sel.trim}
+              onChange={(t) => setTrim(selected, t)}
+              onScrub={setScrub}
+              onDone={() => setTrimId(null)}
+            />
+          </div>
+        ) : sel && selected !== null ? (
           <div className="tools" key="edit">
             <div className="slot-a zoom-row">
               <button className="icon-btn" aria-label="Zoom out" onClick={() => nudge(selected, 0, 0, 1 / 1.15)}>
@@ -1083,6 +1116,10 @@ interface StageProps {
   onMove: (i: number, dir: -1 | 1) => void;
   onRemove: (i: number) => void;
   onReplace: (i: number) => void;
+  onTrim: (i: number) => void;
+  /** The clip whose trimmer is open, and the time (seconds into it) to hold while a trim handle is dragged. */
+  trimmingId: string | null;
+  scrub: number | null;
   playing: boolean;
   /** Index of the slot whose sound plays in the preview, if any. */
   soundFrom: number | null;
@@ -1138,6 +1175,9 @@ function Stage(p: StageProps) {
               onDown={i < n - 1 ? () => p.onMove(i, 1) : undefined}
               onRemove={() => p.onRemove(i)}
               onReplace={() => p.onReplace(i)}
+              onTrim={slot.media?.kind === 'video' ? () => p.onTrim(i) : undefined}
+              trimming={!!slot.media && slot.media.id === p.trimmingId}
+              scrub={slot.media && slot.media.id === p.trimmingId ? p.scrub : null}
             />
           ))}
       </div>
@@ -1165,6 +1205,10 @@ interface SlotViewProps {
   onDown?: () => void;
   onRemove: () => void;
   onReplace: () => void;
+  /** Video slots only: open the trimmer. */
+  onTrim?: () => void;
+  trimming: boolean;
+  scrub: number | null;
 }
 
 const Icon = ({ d, size = 18 }: { d: string; size?: number }) => (
@@ -1193,18 +1237,20 @@ const ICON_ZOOM_IN = 'M11 4a7 7 0 100 14 7 7 0 000-14zM20 20l-4-4M8 11h6M11 8v6'
 const ICON_ZOOM_OUT = 'M11 4a7 7 0 100 14 7 7 0 000-14zM20 20l-4-4M8 11h6';
 const ICON_RESET = 'M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8M3 3v5h5';
 const ICON_REPLACE = 'M16 3l4 4-4 4M20 7H8a4 4 0 00-4 4M8 21l-4-4 4-4M4 17h12a4 4 0 004-4';
+const ICON_SCISSORS = 'M6 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM20 4L8.12 15.88M14.47 14.48L20 20M8.12 8.12L12 12';
 const ICON_TRASH = 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6';
 
-function slotLabel(index: number, count: number, m: SlotState['media'], selected: boolean) {
+function slotLabel(index: number, count: number, slot: SlotState, selected: boolean) {
+  const m = slot.media;
   const where = `Slot ${index + 1} of ${count}`;
   if (!m) return `${where}, empty. Add a photo or video`;
-  const what = m.kind === 'video' ? `video, ${m.duration.toFixed(1)} seconds` : 'photo';
+  const what = m.kind === 'video' ? `video, ${clipLength(m, slot.trim).toFixed(1)} seconds` : 'photo';
   return `${where}, ${what}${selected ? ', selected' : ''}`;
 }
 
 function SlotView(props: SlotViewProps) {
   const { index, count, rect, s, radius, slot, selected, onTap, onTransform, onNudge, onDeselect, onGestureStart } = props;
-  const { onUp, onDown, onRemove, onReplace, playing, sound, onPlayBlocked } = props;
+  const { onUp, onDown, onRemove, onReplace, onTrim, trimming, scrub, playing, sound, onPlayBlocked } = props;
   const onPlayBlockedRef = useRef(onPlayBlocked);
   onPlayBlockedRef.current = onPlayBlocked;
   const m = slot.media;
@@ -1223,6 +1269,60 @@ function SlotView(props: SlotViewProps) {
     }
     else v.pause();
   }, [playing, sound]);
+
+  // Trimmed clips loop over just the kept part. `loop` still covers an untrimmed clip (and a trim that runs to the
+  // end); this watch brings playback back to the trim's start whenever it leaves the range.
+  const range = m?.kind === 'video' ? trimOf(m, slot.trim) : null;
+  const from = m && range ? m.start + range.in : 0;
+  const to = m && range ? m.start + range.out : 0;
+  const trimmed = !!m && m.kind === 'video' && isTrimmed(m, slot.trim);
+  const scrubbing = scrub !== null;
+  useEffect(() => {
+    const v = video.current;
+    if (!v || !trimmed || scrubbing) return;
+    let raf = 0;
+    const check = () => {
+      if (!v.seeking && (v.currentTime >= to - 0.02 || v.currentTime < from - 0.05)) v.currentTime = from;
+      raf = requestAnimationFrame(check);
+    };
+    raf = requestAnimationFrame(check);
+    return () => cancelAnimationFrame(raf);
+  }, [trimmed, from, to, scrubbing]);
+
+  // While a trim handle is dragged, hold the frame under it; seeks queue so a fast drag doesn't pile them up.
+  const pendingSeek = useRef<number | null>(null);
+  useEffect(() => {
+    const v = video.current;
+    if (!v) return;
+    const onSeeked = () => {
+      const t = pendingSeek.current;
+      pendingSeek.current = null;
+      if (t !== null) v.currentTime = t;
+    };
+    v.addEventListener('seeked', onSeeked);
+    return () => v.removeEventListener('seeked', onSeeked);
+  }, [m]);
+  useEffect(() => {
+    const v = video.current;
+    if (!v || !m || scrub === null) return;
+    v.pause();
+    const t = m.start + scrub;
+    if (v.seeking) pendingSeek.current = t;
+    else v.currentTime = t;
+  }, [scrub, m]);
+  // Drag over: play the kept part from its start.
+  const wasScrubbing = useRef(false);
+  useEffect(() => {
+    const v = video.current;
+    if (wasScrubbing.current && !scrubbing && v) {
+      pendingSeek.current = null;
+      v.currentTime = from;
+      if (playingRef.current) v.play().catch(() => {});
+    }
+    wasScrubbing.current = scrubbing;
+  }, [scrubbing]);
+  const playingRef = useRef(playing);
+  playingRef.current = playing;
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef<{ moved: number; startT: Transform; pinchDist?: number } | null>(null);
   // A drag or pinch ends with a click like any tap would: swallow that one.
@@ -1379,7 +1479,7 @@ function SlotView(props: SlotViewProps) {
     >
       {m?.kind === 'image' && <img src={m.url} style={mediaStyle} draggable={false} alt="" />}
       {m?.kind === 'video' && (
-        <video ref={video} data-media-id={m.id} src={m.url} style={mediaStyle} loop muted playsInline preload="auto" />
+        <video ref={video} data-media-id={m.id} data-from={from} src={m.url} style={mediaStyle} loop muted playsInline preload="auto" />
       )}
       {!m && (
         <div className="placeholder" aria-hidden="true">
@@ -1390,20 +1490,29 @@ function SlotView(props: SlotViewProps) {
           <span className="slot-num">{String(index + 1).padStart(2, '0')}</span>
         </div>
       )}
-      {m?.kind === 'video' && (
-        <span className="badge" aria-hidden="true">
-          {m.duration.toFixed(1)}s
-        </span>
-      )}
       {/* The slot's keyboard and screen-reader handle. Its click bubbles to the slot's onClick. */}
       <button
         className="slot-hit"
         data-slot={index}
-        aria-label={slotLabel(index, count, m, selected)}
+        aria-label={slotLabel(index, count, slot, selected)}
         aria-keyshortcuts={m && selected ? 'ArrowLeft ArrowRight ArrowUp ArrowDown Plus - Escape' : undefined}
         aria-describedby={m && selected ? 'gesture-hint' : undefined}
         onKeyDown={onKeyDown}
       />
+      {m?.kind === 'video' && onTrim && (
+        <button
+          className={trimmed ? 'badge trimmed' : 'badge'}
+          aria-label={`Trim clip, ${clipLength(m, slot.trim).toFixed(1)} seconds${trimmed ? ', trimmed' : ''}`}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onTrim();
+          }}
+        >
+          {trimmed && <Icon d={ICON_SCISSORS} size={11} />}
+          {clipLength(m, slot.trim).toFixed(1)}s
+        </button>
+      )}
       {m && selected && (
         <div className="slot-actions" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           {onUp && (
@@ -1414,6 +1523,11 @@ function SlotView(props: SlotViewProps) {
           {onDown && (
             <button aria-label={`Move slot ${index + 1} down`} onClick={onDown}>
               <Icon d={ICON_DOWN} />
+            </button>
+          )}
+          {onTrim && (
+            <button aria-label={`Trim clip in slot ${index + 1}`} aria-pressed={trimming} className={trimming ? 'on' : undefined} onClick={onTrim}>
+              <Icon d={ICON_SCISSORS} />
             </button>
           )}
           <button aria-label={`Replace slot ${index + 1}`} onClick={onReplace}>
