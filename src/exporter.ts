@@ -183,7 +183,9 @@ async function openVideoFeed(media: Media, rect: Rect, s: SlotState, total: numb
       crop,
       width: Math.max(2, Math.round(rect.w * k)),
       height: Math.max(2, Math.round(rect.h * k)),
-      fit: 'fill',
+      // 'cover', not 'fill': the crop already has the slot's shape, but if the decoder's frames don't match the
+      // track's stated size (seen on iPhone), a hair is cropped off instead of the picture being stretched.
+      fit: 'cover',
       poolSize: 3,
     });
     const loopLen = loopLength(media);
@@ -299,7 +301,13 @@ async function encodeVideo(
   // Progress is the slower of the two tracks, so the bar doesn't sit at 100% while sound is still encoding.
   let videoDone = 0;
   let audioDone = 1;
-  const report = () => o.onProgress?.(Math.min(videoDone, audioDone));
+  // Watchdog: iOS can accept an encoder config and then never produce a frame, which left export stuck at 0%.
+  // Any progress counts as a heartbeat; a long silence ends the export with an explanation.
+  let lastBeat = performance.now();
+  const report = () => {
+    lastBeat = performance.now();
+    o.onProgress?.(Math.min(videoDone, audioDone));
+  };
 
   // Optional audio from one video slot.
   let warning: string | undefined;
@@ -370,7 +378,23 @@ async function encodeVideo(
 
   o.signal?.addEventListener('abort', onAbort, { once: true });
   if (o.signal?.aborted) stop.abort(); // Cancel was tapped while we were still setting up
-  try {
+  let stalled = false;
+  let watch = 0;
+  const stall = new Promise<never>((_, reject) => {
+    watch = window.setInterval(() => {
+      if (performance.now() - lastBeat < STALL_MS || stop.signal.aborted) return;
+      stalled = true;
+      stop.abort();
+      reject(
+        new Error(
+          k > 1
+            ? "This phone stopped encoding the High quality video. Try the Standard size."
+            : 'Encoding stopped responding. Close other apps and try again.',
+        ),
+      );
+    }, 1000);
+  });
+  const work = async () => {
     await output.start();
     // Open the feeds one by one, so if one fails the ones already opened are still closed below.
     for (let i = 0; i < o.slots.length; i++) {
@@ -383,19 +407,30 @@ async function encodeVideo(
     const failed = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected');
     if (failed) throw failed.reason;
     o.onProgress?.(1, 'Finishing…');
+    lastBeat = performance.now();
     await output.finalize();
+  };
+  try {
+    await Promise.race([work(), stall]);
   } catch (e) {
-    await output.cancel().catch(() => {});
+    // A stalled encoder may never answer: don't wait on it to cancel.
+    const cancel = output.cancel().catch(() => {});
+    if (!stalled) await cancel;
     // If the user cancelled, a track may have failed with some other error while being torn down: report the cancel.
-    if (o.signal?.aborted) throw new DOMException('Export cancelled', 'AbortError');
+    if (o.signal?.aborted && !stalled) throw new DOMException('Export cancelled', 'AbortError');
     throw e;
   } finally {
+    window.clearInterval(watch);
     o.signal?.removeEventListener('abort', onAbort);
-    await Promise.all(feeds.map((f) => f?.close().catch(() => {})));
+    const closing = Promise.all(feeds.map((f) => f?.close().catch(() => {})));
+    if (!stalled) await closing;
   }
 
   return { warning };
 }
+
+/** No progress for this long means the encoder or a decoder has hung. Opening 4K clips can take a few seconds. */
+const STALL_MS = 20_000;
 
 const EXPORT_PREFIX = 'stack-export-';
 /** Export files older than this are leftovers (closed results, killed sessions); newer ones may be another tab's. */
