@@ -230,9 +230,38 @@ button.wide { width: 100%; padding: 13px; min-height: 46px; }
 /* The + sits dead centre in the slot; the number hangs just below it instead of pushing it up. */
 .placeholder > .slot-num { position: absolute; top: calc(50% + 24px); font: 500 11px/1 var(--mono); color: var(--faint); }
 .badge {
-  position: absolute; right: 6px; bottom: 6px; font: 500 11px/1 var(--mono); padding: 4px 6px; border-radius: 6px; color: #fff;
-  background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); pointer-events: none;
+  position: absolute; z-index: 2; right: 6px; bottom: 6px; display: inline-flex; align-items: center; gap: 4px; margin: 0;
+  font: 500 11px/1 var(--mono); padding: 4px 6px; border: 0; border-radius: 6px; color: #fff; cursor: pointer;
+  background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
 }
+.badge::after { content: ''; position: absolute; inset: -10px -6px -6px -10px; } /* a finger-sized target */
+.badge.trimmed { background: rgba(31, 61, 255, 0.85); }
+.badge:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+.slot-actions button.on { background: rgba(255, 255, 255, 0.18); }
+
+/* Trimmer: a filmstrip with the kept window outlined in the accent, handles just outside it */
+.trim-strip { position: relative; flex: 1; min-width: 0; height: 48px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.trim-film { position: absolute; top: 0; bottom: 0; left: 14px; right: 14px; width: calc(100% - 28px); height: 100%; border-radius: 4px; background: var(--sunken-2); }
+.trim-shade { position: absolute; top: 0; bottom: 0; background: var(--scrim); pointer-events: none; }
+.trim-window { position: absolute; top: 0; bottom: 0; border-block: 3px solid var(--accent); cursor: grab; touch-action: none; }
+.trim-window:active { cursor: grabbing; }
+.trim-handle {
+  position: absolute; top: 0; bottom: 0; width: 14px; display: flex; align-items: center; justify-content: center;
+  background: var(--accent); cursor: ew-resize; touch-action: none; outline: none;
+}
+.trim-handle::before { content: ''; width: 3px; height: 16px; border-radius: 2px; background: rgba(255, 255, 255, 0.85); }
+.trim-handle::after { content: ''; position: absolute; inset: -8px -12px; } /* a finger-sized target */
+.trim-handle.in { border-radius: 6px 0 0 6px; transform: translateX(-100%); }
+.trim-handle.out { border-radius: 0 6px 6px 0; }
+.trim-handle:focus-visible { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--text); }
+.trim-head {
+  position: absolute; top: -4px; bottom: -4px; left: 14px; width: 2px; margin-left: -1px; border-radius: 1px;
+  background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3); pointer-events: none;
+}
+.trim-readout { flex: 1; min-width: 0; font: 500 13px/1 var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+.trim-readout b { color: var(--text); font-weight: 600; }
+.trim-readout .on { color: var(--accent-text); }
+.slot-b .trim-readout ~ .done { flex: none; padding-inline: 20px; }
 
 /* ---------- panel ---------- */
 .panel {

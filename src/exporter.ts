@@ -20,10 +20,13 @@ import {
 } from 'mediabunny';
 import { clamp, computeSlots, mediaRect, type Format, type LayoutOpts, type Rect, type Transform } from './layout';
 import type { Media } from './media';
+import { trimmedMedia, type Trim } from './trim';
 
 export interface SlotState {
   media: Media | null;
   t: Transform;
+  /** Video only: the part of the clip that's kept. Cleared when the clip is replaced. */
+  trim?: Trim;
 }
 
 export interface ExportOpts {
@@ -126,6 +129,8 @@ function hasVideo(slots: SlotState[]) {
 }
 
 export async function exportCollage(o: ExportOpts): Promise<ExportResult> {
+  // Apply trims up front: from here on a trimmed clip is just a shorter clip that starts later.
+  o = { ...o, slots: o.slots.map((s) => (s.media ? { ...s, media: trimmedMedia(s.media, s.trim) } : s)) };
   return hasVideo(o.slots) ? exportVideo(o) : exportImage(o);
 }
 
