@@ -17,10 +17,12 @@ import {
   getFirstEncodableAudioCodec,
   canEncodeVideo,
   type WrappedCanvas,
+  type InputVideoTrack,
 } from 'mediabunny';
 import { clamp, computeSlots, mediaRect, type Format, type LayoutOpts, type Rect, type Transform } from './layout';
 import type { Media } from './media';
 import { trimmedMedia, type Trim } from './trim';
+import { note } from './diag';
 
 export interface SlotState {
   media: Media | null;
@@ -186,6 +188,9 @@ interface FeedSpec {
   total: number;
   /** Where in the clip output frame `f` comes from, looping. */
   timeAt(f: number): number;
+  /** For the report: which slot, and whether its clip has been described yet. */
+  label: string;
+  described?: boolean;
 }
 
 /** A failing decoder is reopened this many times in a row before the slot falls back to a <video> element. */
@@ -205,6 +210,7 @@ async function openVideoFeed(media: Media, rect: Rect, s: SlotState, total: numb
     total,
     // Stay a hair inside the clip so the last frame is always found.
     timeAt: (f) => media.start + Math.min((f / FPS) % loopLen, Math.max(0, loopLen - 1 / (FPS * 4))),
+    label: `video ${slot + 1}`,
   };
 
   // Safari's hardware decoder can fail partway through a clip ("Decoding task failed"), seen with several iPhone
@@ -241,12 +247,16 @@ async function openVideoFeed(media: Media, rect: Rect, s: SlotState, total: numb
         } catch (e) {
           if (closed || (e as DOMException).name === 'AbortError') throw e;
           console.warn(`Export: reading ${label} failed at frame ${f}`, e);
+          note(`${spec.label}: ${usingElement ? '<video> fallback' : 'decoder'} failed at frame ${f}: ${(e as Error)?.name ?? ''} ${(e as Error)?.message ?? e}`);
           firstError ??= e as Error;
           await source?.close().catch(() => {});
           source = null; // the next pass round the loop reopens it
           if (usingElement) throw new Error(`Couldn't read ${label}: ${firstError.message || firstError}`, { cause: e });
           if (failures < DECODER_RETRIES) failures++;
-          else usingElement = true;
+          else {
+            usingElement = true;
+            note(`${spec.label}: switching to the <video> fallback`);
+          }
         }
       }
     },
@@ -262,6 +272,10 @@ async function openDecoderSource(spec: FeedSpec, from: number): Promise<FrameSou
   try {
     const track = await input.getPrimaryVideoTrack();
     if (!track) throw new Error(`No video track in “${spec.media.file.name}”.`);
+    if (!spec.described) {
+      spec.described = true;
+      await describeTrack(spec, track).catch((e) => note(`${spec.label}: couldn't describe it: ${e}`));
+    }
     const sink = new CanvasSink(track, {
       crop: spec.crop,
       width: spec.width,
@@ -290,6 +304,24 @@ async function openDecoderSource(spec: FeedSpec, from: number): Promise<FrameSou
     input.dispose?.();
     throw e;
   }
+}
+
+async function describeTrack(spec: FeedSpec, track: InputVideoTrack) {
+  const m = spec.media;
+  const [codec, stats, color, hdr] = await Promise.all([
+    track.getCodecParameterString(),
+    track.computePacketStats(90),
+    track.getColorSpace(),
+    track.hasHighDynamicRange(),
+  ]);
+  note(
+    `${spec.label}: ${m.file.type || '?'} ${(m.file.size / 1e6).toFixed(1)} MB, ${codec ?? track.codec}, ` +
+      `${track.codedWidth}×${track.codedHeight} coded, ${m.w}×${m.h} shown, rotation ${track.rotation}, ` +
+      `${stats.averagePacketRate.toFixed(1)} fps, ${(stats.averageBitrate / 1e6).toFixed(1)} Mbps, ` +
+      `${m.duration.toFixed(2)} s from ${m.start.toFixed(2)} s, ${hdr ? 'HDR' : 'SDR'} ` +
+      `(${color.primaries ?? '?'}/${color.transfer ?? '?'}/${color.matrix ?? '?'}), ` +
+      `decoding ${spec.crop.width}×${spec.crop.height} → ${spec.width}×${spec.height}`,
+  );
 }
 
 /** Resolve when `target` fires `ok`, reject on `error` or after `ms`. */
@@ -336,6 +368,7 @@ async function openElementSource(spec: FeedSpec, from: number): Promise<FrameSou
     v.play().then(() => v.pause(), () => {});
     await loaded;
     v.pause();
+    note(`${spec.label}: <video> fallback opened (${v.videoWidth}×${v.videoHeight}) at frame ${from}`);
     let useFrameCallback = 'requestVideoFrameCallback' in v;
     let f = from;
     return {
@@ -412,7 +445,13 @@ async function exportVideo(o: ExportOpts): Promise<ExportResult> {
   const duration = Math.min(longest, o.maxDuration);
   const total = Math.max(1, Math.round(duration * FPS));
 
+  note(
+    `Export ${W}×${H} (${k}×), ${o.slots.length} slots: ` +
+      o.slots.map((s) => (s.media ? `${s.media.kind}${s.trim ? ' trimmed' : ''}` : 'empty')).join(', ') +
+      `; ${duration.toFixed(2)} s, ${total} frames, sound from ${o.audioFrom === null ? 'none' : `slot ${o.audioFrom + 1}`}`,
+  );
   const video = await pickVideoConfig(W, H, k);
+  note(video ? `Encoder probe: ${video.fullCodecString ?? video.codec} at ${(video.bitrate / 1e6).toFixed(0)} Mbps` : 'Encoder probe: nothing fits');
   if (!video) throw new Error(`This browser can't encode ${W}×${H} video. Try the Standard size.`);
 
   // An encoder that couldn't start is usually busy rather than unsupported (Safari's probe above works by creating one):
@@ -423,6 +462,7 @@ async function exportVideo(o: ExportOpts): Promise<ExportResult> {
     } catch (e) {
       if (!(e instanceof EncoderUnavailableError) || o.signal?.aborted) throw e;
       console.warn('Export: the video encoder could not start', e.cause);
+      note(`Encoder wouldn't start (attempt ${attempt}): ${e.message}`);
       if (attempt === 2) {
         throw new Error(
           k > 1
@@ -552,8 +592,10 @@ async function encodeVideo(
           await videoSource.add(0, 1 / FPS).catch((e) => {
             throw new EncoderUnavailableError(e);
           });
+          note('Encoder started; first frame encoded');
         } else await videoSource.add(f / FPS, 1 / FPS);
         videoDone = (f + 1) / total;
+        if ((f + 1) % (FPS * 2) === 0 || f + 1 === total) note(`Frame ${f + 1}/${total}`);
         report();
       }
     } finally {
@@ -577,6 +619,7 @@ async function encodeVideo(
     watch = window.setInterval(() => {
       if (performance.now() - lastBeat < STALL_MS || stop.signal.aborted) return;
       stalled = true;
+      note(`Stalled: no progress for ${STALL_MS / 1000} s (video ${Math.round(videoDone * 100)}%, sound ${Math.round(audioDone * 100)}%)`);
       stop.abort();
       reject(
         new Error(
@@ -602,6 +645,7 @@ async function encodeVideo(
     o.onProgress?.(1, 'Finishing…');
     lastBeat = performance.now();
     await output.finalize();
+    note('Finished');
   };
   try {
     await Promise.race([work(), stall]);

@@ -16,6 +16,7 @@ import {
 import { STALE_APP, importFresh, isStale, reloadToUpdate } from './stale';
 import { loadMedia, releaseMedia, type Media } from './media';
 import { Trimmer } from './Trimmer';
+import { diagReport, diagStart } from './diag';
 import { clipLength, isTrimmed, trimOf, type Trim } from './trim';
 import type { ExportResult, SlotState } from './exporter';
 import { Orb } from './Orb';
@@ -40,6 +41,21 @@ type Step = 'start' | 'editor';
 const MAX_DURATION = 60;
 
 const emptySlots = (): SlotState[] => [0, 1, 2].map(() => ({ media: null, t: { ...IDENTITY } }));
+
+/** Put the export report on the clipboard, or hand it to the share sheet where the clipboard isn't allowed. */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      await navigator.share({ text });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
 
 interface Toast {
   msg: string;
@@ -455,6 +471,7 @@ export default function App() {
     abortRef.current = ac;
     setBusy({ progress: 0, label: anyVideo ? 'Rendering video…' : 'Rendering…' });
     exportStart.current = performance.now();
+    diagStart();
     try {
       const { exportCollage } = await loadExporter();
       // A photo renders in a blink. Give the collage a short moment to assemble itself first, so the export reads
@@ -497,7 +514,17 @@ export default function App() {
       if ((e as DOMException).name !== 'AbortError') {
         console.error(e);
         if (isStale(e)) showStale();
-        else showError(`Export failed: ${(e as Error).message}`);
+        else {
+          const report = diagReport(e);
+          showToast({
+            msg: `Export failed: ${(e as Error).message}`,
+            error: true,
+            action: {
+              label: 'Copy details',
+              run: () => void copyText(report).then((ok) => showToast(ok ? 'Details copied' : "Couldn't copy the details")),
+            },
+          });
+        }
       }
     } finally {
       setBusy(null);
@@ -598,14 +625,18 @@ export default function App() {
 
   const toastView = toast && (
     <div
-      className={toast.error ? 'toast error' : 'toast'}
+      className={`toast${toast.error ? ' error' : ''}${toast.error && toast.action ? ' with-action' : ''}`}
       onPointerEnter={() => setToastHeld(true)}
       onPointerLeave={() => setToastHeld(false)}
       onFocus={() => setToastHeld(true)}
       onBlur={() => setToastHeld(false)}
     >
       <span>{toast.msg}</span>
-      {toast.action && <button onClick={toast.action.run}>{toast.action.label}</button>}
+      {toast.action && (
+        <button className="toast-action" onClick={toast.action.run}>
+          {toast.action.label}
+        </button>
+      )}
       {toast.error && (
         <button aria-label="Dismiss" onClick={() => setToast(null)}>
           ×
