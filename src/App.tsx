@@ -638,7 +638,7 @@ export default function App() {
         </button>
       )}
       {toast.error && (
-        <button aria-label="Dismiss" onClick={() => setToast(null)}>
+        <button className="toast-dismiss" aria-label="Dismiss" onClick={() => setToast(null)}>
           ×
         </button>
       )}
