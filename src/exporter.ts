@@ -170,48 +170,196 @@ function visibleCrop(rect: Rect, m: Media, t: Transform) {
   };
 }
 
-async function openVideoFeed(media: Media, rect: Rect, s: SlotState, total: number): Promise<VideoFeed> {
-  const input = new Input({ source: new BlobSource(media.file), formats: ALL_FORMATS });
+/** Frames for one slot, already cropped to the slot's visible area, from frame `from` onwards. */
+interface FrameSource {
+  next(): Promise<CanvasImageSource | null>;
+  close(): Promise<void>;
+}
+
+interface FeedSpec {
+  media: Media;
+  crop: ReturnType<typeof visibleCrop>;
+  width: number;
+  height: number;
+  total: number;
+  /** Where in the clip output frame `f` comes from, looping. */
+  timeAt(f: number): number;
+}
+
+/** A failing decoder is reopened this many times in a row before the slot falls back to a <video> element. */
+const DECODER_RETRIES = 2;
+
+async function openVideoFeed(media: Media, rect: Rect, s: SlotState, total: number, slot: number): Promise<VideoFeed> {
+  // Decode only the visible part, at the slot's size but never above the source's own resolution. Decoding the
+  // whole zoomed frame could ask for a canvas far beyond iOS's ~16.7 MP limit (5× zoom at 2× output), which fails.
+  const crop = visibleCrop(rect, media, s.t);
+  const k = Math.min(1, crop.width / rect.w);
+  const loopLen = loopLength(media);
+  const spec: FeedSpec = {
+    media,
+    crop,
+    width: Math.max(2, Math.round(rect.w * k)),
+    height: Math.max(2, Math.round(rect.h * k)),
+    total,
+    // Stay a hair inside the clip so the last frame is always found.
+    timeAt: (f) => media.start + Math.min((f / FPS) % loopLen, Math.max(0, loopLen - 1 / (FPS * 4))),
+  };
+
+  // Safari's hardware decoder can fail partway through a clip ("Decoding task failed"), seen with several iPhone
+  // 4K HEVC clips decoding at once. A fresh decoder picks up where the old one stopped, and a clip that keeps
+  // failing is read through a <video> element instead — slower, but it plays whatever the preview plays.
+  let source = await openDecoderSource(spec, 0);
+  let usingElement = false;
+  let failures = 0; // in a row
+  let closed = false;
+  let f = 0; // next output frame
+  let last: SlotSource = null;
+  const label = `video ${slot + 1} (“${media.file.name}”)`;
+  return {
+    async next() {
+      for (;;) {
+        try {
+          const c = await source.next();
+          f++;
+          failures = 0;
+          if (c) last = { src: c, cropped: true };
+          return last;
+        } catch (e) {
+          if (closed || (e as DOMException).name === 'AbortError') throw e;
+          console.warn(`Export: reading ${label} failed at frame ${f}`, e);
+          await source.close().catch(() => {});
+          if (!usingElement && failures < DECODER_RETRIES) {
+            failures++;
+            source = await openDecoderSource(spec, f);
+          } else if (!usingElement) {
+            usingElement = true;
+            failures = 0;
+            source = await openElementSource(spec, f).catch((e2) => {
+              throw new Error(`Couldn't read ${label}: ${(e as Error).message || e}`, { cause: e2 });
+            });
+          } else {
+            throw new Error(`Couldn't read ${label}: ${(e as Error).message || e}`);
+          }
+          if (closed) await source.close().catch(() => {});
+        }
+      }
+    },
+    async close() {
+      closed = true;
+      await source.close();
+    },
+  };
+}
+
+async function openDecoderSource(spec: FeedSpec, from: number): Promise<FrameSource> {
+  const input = new Input({ source: new BlobSource(spec.media.file), formats: ALL_FORMATS });
   try {
     const track = await input.getPrimaryVideoTrack();
-    if (!track) throw new Error(`No video track in “${media.file.name}”.`);
-    // Decode only the visible part, at the slot's size but never above the source's own resolution. Decoding the
-    // whole zoomed frame could ask for a canvas far beyond iOS's ~16.7 MP limit (5× zoom at 2× output), which fails.
-    const crop = visibleCrop(rect, media, s.t);
-    const k = Math.min(1, crop.width / rect.w);
+    if (!track) throw new Error(`No video track in “${spec.media.file.name}”.`);
     const sink = new CanvasSink(track, {
-      crop,
-      width: Math.max(2, Math.round(rect.w * k)),
-      height: Math.max(2, Math.round(rect.h * k)),
+      crop: spec.crop,
+      width: spec.width,
+      height: spec.height,
       // 'cover', not 'fill': the crop already has the slot's shape, but if the decoder's frames don't match the
       // track's stated size (seen on iPhone), a hair is cropped off instead of the picture being stretched.
       fit: 'cover',
       poolSize: 3,
     });
-    const loopLen = loopLength(media);
     function* times() {
-      for (let f = 0; f < total; f++) {
-        // Stay a hair inside the clip so the last frame is always found.
-        const t = Math.min((f / FPS) % loopLen, Math.max(0, loopLen - 1 / (FPS * 4)));
-        yield media.start + t;
-      }
+      for (let f = from; f < spec.total; f++) yield spec.timeAt(f);
     }
     const it = sink.canvasesAtTimestamps(times());
-    let last: SlotSource = null;
     return {
       async next() {
         const r = await it.next();
         const w = r.value as WrappedCanvas | null | undefined;
-        if (w) last = { src: w.canvas as CanvasImageSource, cropped: true };
-        return last;
+        return w ? (w.canvas as CanvasImageSource) : null;
       },
       async close() {
-        await it.return?.(undefined);
+        await it.return?.(undefined).catch(() => {});
         input.dispose?.();
       },
     };
   } catch (e) {
     input.dispose?.();
+    throw e;
+  }
+}
+
+/** Resolve when `target` fires `ok`, reject on `error` or after `ms`. */
+function once(target: HTMLMediaElement, ok: string, ms: number, what: string) {
+  return new Promise<void>((resolve, reject) => {
+    const done = (fn: () => void) => {
+      clearTimeout(timer);
+      target.removeEventListener(ok, onOk);
+      target.removeEventListener('error', onErr);
+      fn();
+    };
+    const onOk = () => done(resolve);
+    const onErr = () => done(() => reject(new Error(target.error?.message || `The video couldn't be ${what}.`)));
+    const timer = setTimeout(() => done(() => reject(new Error(`The video took too long to be ${what}.`))), ms);
+    target.addEventListener(ok, onOk);
+    target.addEventListener('error', onErr);
+  });
+}
+
+/**
+ * Frames from a hidden <video> element, seeked to each frame's time. The fallback when WebCodecs can't decode a
+ * clip: the browser's own player is a separate decoding path, the one the preview already uses successfully.
+ */
+async function openElementSource(spec: FeedSpec, from: number): Promise<FrameSource> {
+  const v = document.createElement('video');
+  v.muted = true;
+  v.playsInline = true;
+  v.preload = 'auto';
+  // In the page but invisible: some browsers don't decode frames for a video that isn't in the document.
+  v.setAttribute('aria-hidden', 'true');
+  Object.assign(v.style, { position: 'fixed', left: '0', top: '0', width: '2px', height: '2px', opacity: '0', pointerEvents: 'none' });
+  document.body.appendChild(v);
+  const { c, ctx } = makeCanvas(spec.width, spec.height);
+  const close = async () => {
+    v.removeAttribute('src');
+    v.load(); // frees the decoder now rather than at garbage collection
+    v.remove();
+  };
+  try {
+    const loaded = once(v, 'loadeddata', 15_000, 'opened');
+    v.src = spec.media.url;
+    v.load();
+    // iOS may not fetch any frames until the video has played; a muted play is always allowed.
+    v.play().then(() => v.pause(), () => {});
+    await loaded;
+    v.pause();
+    let useFrameCallback = 'requestVideoFrameCallback' in v;
+    let f = from;
+    return {
+      async next() {
+        if (f >= spec.total) return null;
+        const t = spec.timeAt(f++);
+        if (Math.abs(v.currentTime - t) > 1 / (FPS * 8)) {
+          const seeked = once(v, 'seeked', 15_000, 'read at this point');
+          v.currentTime = t;
+          await seeked;
+          // 'seeked' can fire before the new frame is ready to draw; wait for it, but don't rely on it arriving.
+          if (useFrameCallback) {
+            const shown = await Promise.race([
+              new Promise<boolean>((r) => v.requestVideoFrameCallback(() => r(true))),
+              new Promise<boolean>((r) => setTimeout(() => r(false), 250)),
+            ]);
+            if (!shown) useFrameCallback = false;
+          }
+        }
+        // The crop is in display pixels of the size mediabunny reported; scale it if the element's differs.
+        const kx = (v.videoWidth || spec.media.w) / spec.media.w;
+        const ky = (v.videoHeight || spec.media.h) / spec.media.h;
+        const { left, top, width, height } = spec.crop;
+        ctx.drawImage(v, left * kx, top * ky, width * kx, height * ky, 0, 0, spec.width, spec.height);
+        return c;
+      },
+      close,
+    };
+  } catch (e) {
+    await close();
     throw e;
   }
 }
@@ -399,7 +547,7 @@ async function encodeVideo(
     // Open the feeds one by one, so if one fails the ones already opened are still closed below.
     for (let i = 0; i < o.slots.length; i++) {
       const s = o.slots[i];
-      if (s.media?.kind === 'video') feeds[i] = await openVideoFeed(s.media, scaleRect(rects[i], k), s, total);
+      if (s.media?.kind === 'video') feeds[i] = await openVideoFeed(s.media, scaleRect(rects[i], k), s, total, i);
     }
     // Feed both tracks concurrently — the muxer interleaves them and applies backpressure. Wait for both to stop
     // (a failure in one aborts the other) before tearing anything down, then report the first failure.
