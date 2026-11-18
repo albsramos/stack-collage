@@ -150,6 +150,8 @@ async function exportImage(o: ExportOpts): Promise<ExportResult> {
 
 interface VideoFeed {
   next(): Promise<SlotSource>;
+  /** Free the decoder for now; the next frame reopens it where it left off. */
+  release(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -208,17 +210,29 @@ async function openVideoFeed(media: Media, rect: Rect, s: SlotState, total: numb
   // Safari's hardware decoder can fail partway through a clip ("Decoding task failed"), seen with several iPhone
   // 4K HEVC clips decoding at once. A fresh decoder picks up where the old one stopped, and a clip that keeps
   // failing is read through a <video> element instead — slower, but it plays whatever the preview plays.
-  let source = await openDecoderSource(spec, 0);
+  let source: FrameSource | null = null; // opened on the first frame, and again after release()
   let usingElement = false;
   let failures = 0; // in a row
+  let firstError: Error | null = null;
   let closed = false;
   let f = 0; // next output frame
   let last: SlotSource = null;
   const label = `video ${slot + 1} (“${media.file.name}”)`;
+  const release = async () => {
+    const s = source;
+    source = null;
+    await s?.close().catch(() => {});
+  };
   return {
+    release,
     async next() {
       for (;;) {
         try {
+          source ??= await (usingElement ? openElementSource(spec, f) : openDecoderSource(spec, f));
+          if (closed) {
+            await source.close().catch(() => {});
+            throw new DOMException('Export cancelled', 'AbortError');
+          }
           const c = await source.next();
           f++;
           failures = 0;
@@ -227,26 +241,18 @@ async function openVideoFeed(media: Media, rect: Rect, s: SlotState, total: numb
         } catch (e) {
           if (closed || (e as DOMException).name === 'AbortError') throw e;
           console.warn(`Export: reading ${label} failed at frame ${f}`, e);
-          await source.close().catch(() => {});
-          if (!usingElement && failures < DECODER_RETRIES) {
-            failures++;
-            source = await openDecoderSource(spec, f);
-          } else if (!usingElement) {
-            usingElement = true;
-            failures = 0;
-            source = await openElementSource(spec, f).catch((e2) => {
-              throw new Error(`Couldn't read ${label}: ${(e as Error).message || e}`, { cause: e2 });
-            });
-          } else {
-            throw new Error(`Couldn't read ${label}: ${(e as Error).message || e}`);
-          }
-          if (closed) await source.close().catch(() => {});
+          firstError ??= e as Error;
+          await source?.close().catch(() => {});
+          source = null; // the next pass round the loop reopens it
+          if (usingElement) throw new Error(`Couldn't read ${label}: ${firstError.message || firstError}`, { cause: e });
+          if (failures < DECODER_RETRIES) failures++;
+          else usingElement = true;
         }
       }
     },
     async close() {
       closed = true;
-      await source.close();
+      await release();
     },
   };
 }
@@ -409,6 +415,34 @@ async function exportVideo(o: ExportOpts): Promise<ExportResult> {
   const video = await pickVideoConfig(W, H, k);
   if (!video) throw new Error(`This browser can't encode ${W}×${H} video. Try the Standard size.`);
 
+  // An encoder that couldn't start is usually busy rather than unsupported (Safari's probe above works by creating one):
+  // give the hardware a moment and try once more before giving up.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await exportVideoOnce(o, video, duration, total);
+    } catch (e) {
+      if (!(e instanceof EncoderUnavailableError) || o.signal?.aborted) throw e;
+      console.warn('Export: the video encoder could not start', e.cause);
+      if (attempt === 2) {
+        throw new Error(
+          k > 1
+            ? "This phone's video encoder wouldn't start at High quality. Try the Standard size."
+            : "This phone's video encoder wouldn't start. Close other apps that use the camera or video, then try again.",
+        );
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+}
+
+/** The video encoder couldn't be created. Not a lack of support: `pickVideoConfig` already made one. */
+class EncoderUnavailableError extends Error {
+  constructor(cause: unknown) {
+    super((cause as Error)?.message ?? String(cause), { cause });
+  }
+}
+
+async function exportVideoOnce(o: ExportOpts, video: VideoConfig, duration: number, total: number): Promise<ExportResult> {
   const sink = await openOutputFile();
   try {
     const { warning } = await encodeVideo(o, sink, video, duration, total);
@@ -507,7 +541,18 @@ async function encodeVideo(
         checkAborted();
         const frames = await Promise.all(o.slots.map((_, i) => feeds[i]?.next() ?? null));
         drawSlots(ctx, o, rects, frames, isVideo, true);
-        await videoSource.add(f / FPS, 1 / FPS);
+        if (f === 0) {
+          // The encoder is created on the first frame. Safari answers "not supported" when it can't get one, and
+          // it couldn't with three iPhone 4K clips' decoders already open. So with frame 0 drawn, free the
+          // decoders, start the encoder on its own, and let them reopen from frame 1 alongside it.
+          await Promise.all(feeds.map((feed) => feed?.release()));
+          // mediabunny closes a released decoder once its read loop notices, and Safari frees it in another process
+          // after that: give both a moment so the hardware is actually free.
+          if (feeds.some(Boolean)) await new Promise((r) => setTimeout(r, 250));
+          await videoSource.add(0, 1 / FPS).catch((e) => {
+            throw new EncoderUnavailableError(e);
+          });
+        } else await videoSource.add(f / FPS, 1 / FPS);
         videoDone = (f + 1) / total;
         report();
       }

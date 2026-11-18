@@ -655,6 +655,7 @@ export default function App() {
         }}
         onDeselect={deselect}
         playing={playing && !busy}
+        released={!!busy}
         onPlayBlocked={() => {
           // e.g. Low Power Mode blocks autoplay: show Play, so the button tells the truth.
           setPlaying(false);
@@ -1121,6 +1122,8 @@ interface StageProps {
   trimmingId: string | null;
   scrub: number | null;
   playing: boolean;
+  /** Unload the preview's videos (while exporting), each showing a still of its frame. */
+  released: boolean;
   /** Index of the slot whose sound plays in the preview, if any. */
   soundFrom: number | null;
   onPlayBlocked: () => void;
@@ -1164,6 +1167,7 @@ function Stage(p: StageProps) {
               slot={slot}
               selected={p.selected === i}
               playing={p.playing}
+              released={p.released}
               sound={p.soundFrom === i}
               onPlayBlocked={p.onPlayBlocked}
               onTap={() => (slot.media ? p.onSelect(i) : p.onEmptyTap(i))}
@@ -1194,6 +1198,7 @@ interface SlotViewProps {
   slot: SlotState;
   selected: boolean;
   playing: boolean;
+  released: boolean;
   sound: boolean;
   onPlayBlocked: () => void;
   onTap: () => void;
@@ -1250,7 +1255,7 @@ function slotLabel(index: number, count: number, slot: SlotState, selected: bool
 
 function SlotView(props: SlotViewProps) {
   const { index, count, rect, s, radius, slot, selected, onTap, onTransform, onNudge, onDeselect, onGestureStart } = props;
-  const { onUp, onDown, onRemove, onReplace, onTrim, trimming, scrub, playing, sound, onPlayBlocked } = props;
+  const { onUp, onDown, onRemove, onReplace, onTrim, trimming, scrub, playing, released, sound, onPlayBlocked } = props;
   const onPlayBlockedRef = useRef(onPlayBlocked);
   onPlayBlockedRef.current = onPlayBlocked;
   const m = slot.media;
@@ -1269,6 +1274,39 @@ function SlotView(props: SlotViewProps) {
     }
     else v.pause();
   }, [playing, sound]);
+
+  // While exporting, unload the video. On iPhone each loaded <video> can hold a hardware decoder, even paused, and
+  // the export needs those for its own decoders and encoder ("Decoding task failed", "encoder configuration ... not
+  // supported"). A still of the current frame stands in. When export ends, React runs this cleanup before the
+  // play effect above, so the source is back before play() is called.
+  useEffect(() => {
+    const v = video.current;
+    if (!v || !released || !m) return;
+    v.pause();
+    const t = v.currentTime;
+    let poster: string | null = null;
+    try {
+      const k = Math.min(1, 720 / Math.max(v.videoWidth, v.videoHeight, 1));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(v.videoWidth * k));
+      c.height = Math.max(1, Math.round(v.videoHeight * k));
+      if (v.videoWidth) {
+        c.getContext('2d')!.drawImage(v, 0, 0, c.width, c.height);
+        poster = c.toDataURL('image/jpeg', 0.85);
+        v.poster = poster;
+      }
+    } catch {
+      // no still: the slot shows the background for the length of the export
+    }
+    v.removeAttribute('src');
+    v.load();
+    return () => {
+      v.src = m.url;
+      v.currentTime = t;
+      const clear = () => poster && v.poster === poster && v.removeAttribute('poster');
+      v.addEventListener('loadeddata', clear, { once: true });
+    };
+  }, [released, m]);
 
   // Trimmed clips loop over just the kept part. `loop` still covers an untrimmed clip (and a trim that runs to the
   // end); this watch brings playback back to the trim's start whenever it leaves the range.
