@@ -1,6 +1,17 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { execSync } from 'node:child_process';
+
+// Which build a bug report came from: the commit, plus the time it was built.
+const commit = (() => {
+  try {
+    return execSync('git rev-parse --short HEAD').toString().trim();
+  } catch {
+    return process.env.GITHUB_SHA?.slice(0, 7) ?? 'unknown';
+  }
+})();
+const build = `${commit} ${new Date().toISOString().slice(0, 16)}Z`;
 
 // BASE is set by the GitHub Pages workflow (e.g. "/stack-collage/"); "/" for local dev.
 const base = process.env.BASE ?? '/';
@@ -8,6 +19,7 @@ const base = process.env.BASE ?? '/';
 const artifact = !!process.env.ARTIFACT;
 
 export default defineConfig({
+  define: { __BUILD__: JSON.stringify(build) },
   base: artifact ? './' : base,
   plugins: [
     react(),

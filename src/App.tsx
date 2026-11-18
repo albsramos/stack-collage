@@ -16,6 +16,7 @@ import {
 import { STALE_APP, importFresh, isStale, reloadToUpdate } from './stale';
 import { loadMedia, releaseMedia, type Media } from './media';
 import { Trimmer } from './Trimmer';
+import { diagReport, diagStart } from './diag';
 import { clipLength, isTrimmed, trimOf, type Trim } from './trim';
 import type { ExportResult, SlotState } from './exporter';
 import { Orb } from './Orb';
@@ -40,6 +41,21 @@ type Step = 'start' | 'editor';
 const MAX_DURATION = 60;
 
 const emptySlots = (): SlotState[] => [0, 1, 2].map(() => ({ media: null, t: { ...IDENTITY } }));
+
+/** Put the export report on the clipboard, or hand it to the share sheet where the clipboard isn't allowed. */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      await navigator.share({ text });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
 
 interface Toast {
   msg: string;
@@ -455,6 +471,7 @@ export default function App() {
     abortRef.current = ac;
     setBusy({ progress: 0, label: anyVideo ? 'Rendering video…' : 'Rendering…' });
     exportStart.current = performance.now();
+    diagStart();
     try {
       const { exportCollage } = await loadExporter();
       // A photo renders in a blink. Give the collage a short moment to assemble itself first, so the export reads
@@ -497,7 +514,17 @@ export default function App() {
       if ((e as DOMException).name !== 'AbortError') {
         console.error(e);
         if (isStale(e)) showStale();
-        else showError(`Export failed: ${(e as Error).message}`);
+        else {
+          const report = diagReport(e);
+          showToast({
+            msg: `Export failed: ${(e as Error).message}`,
+            error: true,
+            action: {
+              label: 'Copy details',
+              run: () => void copyText(report).then((ok) => showToast(ok ? 'Details copied' : "Couldn't copy the details")),
+            },
+          });
+        }
       }
     } finally {
       setBusy(null);
@@ -598,16 +625,20 @@ export default function App() {
 
   const toastView = toast && (
     <div
-      className={toast.error ? 'toast error' : 'toast'}
+      className={`toast${toast.error ? ' error' : ''}${toast.error && toast.action ? ' with-action' : ''}`}
       onPointerEnter={() => setToastHeld(true)}
       onPointerLeave={() => setToastHeld(false)}
       onFocus={() => setToastHeld(true)}
       onBlur={() => setToastHeld(false)}
     >
       <span>{toast.msg}</span>
-      {toast.action && <button onClick={toast.action.run}>{toast.action.label}</button>}
+      {toast.action && (
+        <button className="toast-action" onClick={toast.action.run}>
+          {toast.action.label}
+        </button>
+      )}
       {toast.error && (
-        <button aria-label="Dismiss" onClick={() => setToast(null)}>
+        <button className="toast-dismiss" aria-label="Dismiss" onClick={() => setToast(null)}>
           ×
         </button>
       )}
@@ -655,6 +686,7 @@ export default function App() {
         }}
         onDeselect={deselect}
         playing={playing && !busy}
+        released={!!busy}
         onPlayBlocked={() => {
           // e.g. Low Power Mode blocks autoplay: show Play, so the button tells the truth.
           setPlaying(false);
@@ -1121,6 +1153,8 @@ interface StageProps {
   trimmingId: string | null;
   scrub: number | null;
   playing: boolean;
+  /** Unload the preview's videos (while exporting), each showing a still of its frame. */
+  released: boolean;
   /** Index of the slot whose sound plays in the preview, if any. */
   soundFrom: number | null;
   onPlayBlocked: () => void;
@@ -1164,6 +1198,7 @@ function Stage(p: StageProps) {
               slot={slot}
               selected={p.selected === i}
               playing={p.playing}
+              released={p.released}
               sound={p.soundFrom === i}
               onPlayBlocked={p.onPlayBlocked}
               onTap={() => (slot.media ? p.onSelect(i) : p.onEmptyTap(i))}
@@ -1194,6 +1229,7 @@ interface SlotViewProps {
   slot: SlotState;
   selected: boolean;
   playing: boolean;
+  released: boolean;
   sound: boolean;
   onPlayBlocked: () => void;
   onTap: () => void;
@@ -1250,7 +1286,7 @@ function slotLabel(index: number, count: number, slot: SlotState, selected: bool
 
 function SlotView(props: SlotViewProps) {
   const { index, count, rect, s, radius, slot, selected, onTap, onTransform, onNudge, onDeselect, onGestureStart } = props;
-  const { onUp, onDown, onRemove, onReplace, onTrim, trimming, scrub, playing, sound, onPlayBlocked } = props;
+  const { onUp, onDown, onRemove, onReplace, onTrim, trimming, scrub, playing, released, sound, onPlayBlocked } = props;
   const onPlayBlockedRef = useRef(onPlayBlocked);
   onPlayBlockedRef.current = onPlayBlocked;
   const m = slot.media;
@@ -1269,6 +1305,39 @@ function SlotView(props: SlotViewProps) {
     }
     else v.pause();
   }, [playing, sound]);
+
+  // While exporting, unload the video. On iPhone each loaded <video> can hold a hardware decoder, even paused, and
+  // the export needs those for its own decoders and encoder ("Decoding task failed", "encoder configuration ... not
+  // supported"). A still of the current frame stands in. When export ends, React runs this cleanup before the
+  // play effect above, so the source is back before play() is called.
+  useEffect(() => {
+    const v = video.current;
+    if (!v || !released || !m) return;
+    v.pause();
+    const t = v.currentTime;
+    let poster: string | null = null;
+    try {
+      const k = Math.min(1, 720 / Math.max(v.videoWidth, v.videoHeight, 1));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(v.videoWidth * k));
+      c.height = Math.max(1, Math.round(v.videoHeight * k));
+      if (v.videoWidth) {
+        c.getContext('2d')!.drawImage(v, 0, 0, c.width, c.height);
+        poster = c.toDataURL('image/jpeg', 0.85);
+        v.poster = poster;
+      }
+    } catch {
+      // no still: the slot shows the background for the length of the export
+    }
+    v.removeAttribute('src');
+    v.load();
+    return () => {
+      v.src = m.url;
+      v.currentTime = t;
+      const clear = () => poster && v.poster === poster && v.removeAttribute('poster');
+      v.addEventListener('loadeddata', clear, { once: true });
+    };
+  }, [released, m]);
 
   // Trimmed clips loop over just the kept part. `loop` still covers an untrimmed clip (and a trim that runs to the
   // end); this watch brings playback back to the trim's start whenever it leaves the range.

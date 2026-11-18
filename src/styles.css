@@ -414,7 +414,9 @@ button.wide { width: 100%; padding: 13px; min-height: 46px; }
 
 .toast {
   position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%);
-  background: var(--surface); padding: 10px 16px; border-radius: 12px; font-size: 14px; z-index: 20; max-width: 90vw;
+  background: var(--surface); padding: 10px 16px; border-radius: 12px; font-size: 14px; z-index: 20;
+  /* left: 50% would otherwise leave it only half the screen to wrap in */
+  width: max-content; max-width: min(90vw, 420px);
   box-shadow: var(--shadow-lg); display: flex; align-items: center; gap: 12px; animation: toast-in 0.35s var(--ease-out);
 }
 .toast.error { box-shadow: 0 0 0 1px var(--danger), 0 12px 32px -8px rgba(0, 0, 0, 0.2); }
@@ -423,6 +425,13 @@ button.wide { width: 100%; padding: 13px; min-height: 46px; }
   color: var(--accent-text); font-weight: 600; font-size: 14px; cursor: pointer;
 }
 .toast.error button { color: var(--text); font-size: 20px; }
+/* × sits in the top-right corner, however many lines the message wraps to. */
+.toast .toast-dismiss { align-self: flex-start; }
+.toast.error .toast-action { color: var(--accent-text); font-size: 14px; white-space: nowrap; }
+/* An error with an action: the message and × on top, the action on its own line under the message. */
+.toast.with-action { flex-wrap: wrap; row-gap: 0; }
+.toast.with-action > span { flex: 1 1 0; min-width: 0; }
+.toast.with-action > .toast-action { order: 2; flex-basis: 100%; justify-content: flex-start; text-align: left; margin: 0 0 -10px -8px; }
 
 /* floating actions on the selected slot */
 .slot-actions {
