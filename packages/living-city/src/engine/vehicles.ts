@@ -52,7 +52,7 @@ export class Zone {
       if (here.includes(q.key[0])) mine++;
       else others++;
     }
-    const minGreen = 4, maxGreen = this.phase === 0 ? 14 : 10;
+    const minGreen = 3, maxGreen = this.phase === 0 ? 11 : 8;
     if (others > 0 && (this.phaseT > maxGreen || (this.phaseT > minGreen && mine === 0))) this.clearing = 1.2;
   }
 
@@ -310,6 +310,11 @@ export interface Leg {
   arrive?: (v: Vehicle) => void;
   /** Don't brake for other vehicles on this leg (scripted yard moves). */
   ghost?: boolean;
+  /**
+   * For a semi reversing: the trailer's heading (radians) at each distance along this leg. Backing a trailer is
+   * unstable to simulate, so a reverse leg replays a forward run backwards (see `backingTrack`).
+   */
+  trailerAngle?: (s: number) => number;
 }
 
 interface LegState extends Leg {
@@ -606,6 +611,15 @@ export class Vehicle {
 
   private updateTrailer() {
     const kx = this.x - this.hx * 1.6, ky = this.y - this.hy * 1.6;
+    const fn = this.leg?.trailerAngle;
+    if (fn) {
+      const a = fn(this.s);
+      this.thx = Math.cos(a);
+      this.thy = Math.sin(a);
+      this.tx = kx - this.thx * 9.6;
+      this.ty = ky - this.thy * 9.6;
+      return;
+    }
     let dx = kx - this.tx, dy = ky - this.ty;
     const d = Math.hypot(dx, dy) || 1;
     dx /= d;
@@ -640,7 +654,8 @@ export class Vehicle {
       for (const b of o.bodies) {
         if (Math.abs(b.x - this.x) > look + this.hl + b.hl + 2 || Math.abs(b.y - this.y) > look + this.hl + b.hl + 2) continue;
         // whatever is behind our centre is not in our way
-        if ((b.x - this.x) * mx + (b.y - this.y) * my < 0) continue;
+        // (and two that ended up overlapping each ignore the other, so they can separate)
+        if ((b.x - this.x) * mx + (b.y - this.y) * my <= 0.05) continue;
         near.push(b);
         owners.push(o);
       }
@@ -915,6 +930,45 @@ function drawTrailer(r: R, v: Vehicle) {
   P(0.55, W * 1.01, Math.min(4.08, top + 0.28));
   P(-12.75, W * 1.01, Math.min(4.08, top + 0.28));
   fillQuad(r, (v.mats[5] as Mat).at(0.45), pts[0], pts[1], pts[2], pts[3], pts[4], pts[5], pts[6], pts[7]);
+}
+
+/**
+ * Backing a semi into a dock. `out` is the forward pull-out from the dock; the returned leg drives the same
+ * curve in reverse (`path` must be `out` run backwards, which a symmetric fillet path is). The trailer heading is
+ * recorded from a forward simulation of `out` and played back, which is physically exact because the trailer's
+ * no-slip constraint doesn't care which way time runs. `startAngle` is the trailer heading the truck arrives with;
+ * any difference is blended out over the first eight metres.
+ */
+export function backingTrack(out: Path, startAngle: number): (s: number) => number {
+  const ds = 0.05;
+  const n = Math.ceil(out.len / ds) + 1;
+  const track = new Float32Array(n);
+  const p: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
+  out.at(0, p);
+  let kx = p.x - p.hx * 1.6, ky = p.y - p.hy * 1.6;
+  let ax = kx - p.hx * 9.6, ay = ky - p.hy * 9.6;
+  for (let i = 0; i < n; i++) {
+    out.at(i * ds, p);
+    kx = p.x - p.hx * 1.6;
+    ky = p.y - p.hy * 1.6;
+    let dx = kx - ax, dy = ky - ay;
+    const d = Math.hypot(dx, dy) || 1;
+    dx /= d;
+    dy /= d;
+    ax = kx - dx * 9.6;
+    ay = ky - dy * 9.6;
+    track[i] = Math.atan2(dy, dx);
+  }
+  const L = out.len;
+  const end = track[n - 1];
+  let off = startAngle - end;
+  while (off > Math.PI) off -= Math.PI * 2;
+  while (off < -Math.PI) off += Math.PI * 2;
+  return (sRev: number) => {
+    const sf = Math.max(0, Math.min(L, L - sRev));
+    const a = track[Math.min(n - 1, Math.round(sf / ds))];
+    return a + off * Math.max(0, 1 - sRev / 8);
+  };
 }
 
 // ---------------------------------------------------------------------------------------------------------------
