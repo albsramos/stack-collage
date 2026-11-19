@@ -747,55 +747,6 @@ export class Crane implements Activity {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Robot workbench: parts slide along the bench while robots work on them.
-
-export class Workbench implements Activity {
-  private parts: { x: number; k: number }[] = [];
-  private spawnT = 0;
-
-  constructor(private env: Env, readonly x0: number, readonly x1: number, readonly y0: number, readonly y1: number) {
-    const { pal, rng, crowd, statics } = env;
-    const h = 0.95;
-    statics.push(
-      new FnItem(x0, y0, 0, x1, y1, h + 0.4, (r) => {
-        box(r, x0, y0, 0, x1, y1, h, pal.white, { edge: 'rgba(255,255,255,0.7)' });
-        // conveyor belt strip
-        box(r, x0 + 0.2, (y0 + y1) / 2 - 0.3, h, x1 - 0.2, (y0 + y1) / 2 + 0.3, h + 0.04, pal.dark);
-        for (const p of this.parts) {
-          const m = p.k > 0.5 ? pal.crate : pal.steel;
-          const cy = (y0 + y1) / 2;
-          box(r, p.x - 0.22, cy - 0.2, h + 0.04, p.x + 0.22, cy + 0.2, h + 0.36, m);
-        }
-      }, (ctx) => boxShadow(ctx, x0, y0, x1, y1, h)),
-    );
-    for (let x = x0 + 0.6; x < x1 - 0.3; x += 0.8) this.parts.push({ x, k: rng() });
-    const front = [x0 + 1.4, x0 + 3.9, x0 + 6.4, x0 + 8.8];
-    for (const x of front) {
-      const w = new Walker('robot', pal, rng, x, y1 + 1.05);
-      w.face(0, -1);
-      w.stance = 'work';
-      crowd.add(w);
-    }
-    for (const x of [x0 + 2.7, x0 + 7.4]) {
-      const w = new Walker('robot', pal, rng, x, y0 - 0.9);
-      w.face(0, 1);
-      w.stance = 'work';
-      crowd.add(w);
-    }
-  }
-
-  update(dt: number) {
-    for (const p of this.parts) p.x += dt * 0.32;
-    this.parts = this.parts.filter((p) => p.x < this.x1 - 0.35);
-    this.spawnT -= dt;
-    if (this.spawnT <= 0) {
-      this.spawnT = 2.5;
-      this.parts.push({ x: this.x0 + 0.4, k: this.env.rng() });
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------------------------------------------
 // Loops: a walker that repeats a list of steps forever (dock workers, a battery-yard inspector, site workers).
 
 export class Looper implements Activity {

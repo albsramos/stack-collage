@@ -1,7 +1,7 @@
 // The city: ground plan, buildings, props, traffic routes, walkways and the activities that bring it to life.
 //
 // Layout (world units ≈ metres). Roads: an avenue along y at x 68–76, a street along x at y 42–50 that bends into
-// the factory road along y at x 44–52. Factory top-left with the AI compute on the plaza in front of it; the dock
+// the factory road along y at x 44–52. Factory top-left with a large AI-compute platform in front of it; the dock
 // wing and an open truck yard (gate off the avenue, exit onto the street) top-centre, battery yard top-right;
 // a home with carport and the loading bay left; charging lot and construction bottom-centre; pavilion, robotaxi
 // stop and park bottom-right.
@@ -16,7 +16,7 @@ import type { Sprites } from './sprites';
 import { BoxItem, FnItem, HedgeItem, LampItem, TreeItem, type Static } from './statics';
 import { MESH, Traffic, junction, sameKind, type VehicleKind } from './vehicles';
 import { Crowd, WalkGraph, Walker } from './walkers';
-import { ChargingLot, Crane, Looper, Park, TaxiStop, TruckBay, TruckYard, Workbench, type Activity, type Env } from './activities';
+import { ChargingLot, Crane, Looper, Park, TaxiStop, TruckBay, TruckYard, type Activity, type Env } from './activities';
 
 export interface World {
   statics: Static[];
@@ -210,9 +210,10 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
   }
 
   // ------------------------------------------------------------------------------------------------- AI compute
+  // one platform of server racks from the dock wing down to the plaza walk, eight rows of three
   S.push(
-    new FnItem(29.8, 37, 0, 40.8, 47, 0.35, (r) => {
-      box(r, 29.8, 37, 0, 40.8, 47, 0.35, pal.concrete, { edge });
+    new FnItem(30.6, 26.6, 0, 42.8, 47.2, 0.35, (r) => {
+      box(r, 30.6, 26.6, 0, 42.8, 47.2, 0.35, pal.concrete, { edge });
       const ctx = r.ctx;
       const pulse = 0.5 + 0.5 * Math.sin(r.t * 1.2);
       ctx.save();
@@ -224,22 +225,23 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
       ctx.lineWidth = 0.12;
       ctx.lineJoin = 'round';
       ctx.beginPath();
-      lineW(ctx, 29.8, 47.1, 0.04, 40.9, 47.1, 0.04);
-      lineW(ctx, 40.9, 47.1, 0.04, 40.9, 37, 0.04);
+      lineW(ctx, 30.6, 47.3, 0.04, 42.9, 47.3, 0.04);
+      lineW(ctx, 42.9, 47.3, 0.04, 42.9, 26.6, 0.04);
       ctx.stroke();
       ctx.shadowBlur = 0;
       ctx.globalAlpha = 0.35 + 0.3 * pulse;
       ctx.lineWidth = 0.06;
       ctx.beginPath();
-      lineW(ctx, 30.0, 46.8, 0.36, 40.6, 46.8, 0.36);
-      lineW(ctx, 40.6, 46.8, 0.36, 40.6, 37.2, 0.36);
+      lineW(ctx, 30.8, 47.0, 0.36, 42.6, 47.0, 0.36);
+      lineW(ctx, 42.6, 47.0, 0.36, 42.6, 26.8, 0.36);
       ctx.stroke();
       ctx.restore();
     }),
   );
   let rackSeed = 0;
-  for (const y0 of [38.0, 40.5, 43.0, 45.5]) {
-    for (const [x0, x1] of [[30.8, 35.1], [35.5, 39.8]]) {
+  for (let row = 0; row < 8; row++) {
+    const y0 = 27.4 + row * 2.45;
+    for (const [x0, x1] of [[31.4, 34.73], [35.13, 38.47], [38.87, 42.2]]) {
       const seed = rackSeed++;
       S.push(new BoxItem(x0, y0, 0.35, x1, y0 + 1.1, 2.65, pal.rack, { edge }, (r) => rackFront(r, pal, x0, x1, y0 + 1.1, 0.35, 2.65)).live((r) => rackLeds(r, pal, x0, x1, y0 + 1.1, 2.65, seed)));
     }
@@ -398,12 +400,12 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
 
   // ------------------------------------------------------------------------------------------------- greenery and street furniture
   const trees: [number, number, 'tree' | 'tree2' | 'poplar' | 'small', number][] = [
-    [29.6, 66.4, 'tree', 1], [34.6, 69.0, 'tree2', 0.9], [43.6, 41.2, 'tree', 0.95], [27.6, 44.5, 'poplar', 0.9],
+    [29.6, 66.4, 'tree', 1], [34.6, 69.0, 'tree2', 0.9], [47.4, 39.2, 'tree', 0.95], [27.6, 44.5, 'poplar', 0.9],
     [65.7, 21.8, 'poplar', 1], [65.7, 33.0, 'poplar', 1], [65.8, -9, 'poplar', 1], [78.7, 16.5, 'tree', 1],
     [84.3, 56.6, 'tree', 1], [89.8, 63.4, 'tree2', 1], [99.5, 57.5, 'small', 1], [105.5, 52.6, 'tree', 1], [54.0, 82.6, 'small', 0.9],
     [53.2, 92.5, 'poplar', 0.9], [53.4, 103, 'tree2', 0.9], [31.0, 103.5, 'tree', 1], [31.2, 85.2, 'tree2', 0.95],
     [18.6, 74.4, 'small', 0.9], [98.8, 40.0, 'tree2', 0.9], [110, 39.6, 'tree', 1], [78.8, 88.5, 'tree', 1],
-    [66.3, 88.4, 'small', 0.9], [78.7, 9, 'tree2', 1], [47.8, 33.4, 'small', 0.85],
+    [66.3, 88.4, 'small', 0.9], [78.7, 9, 'tree2', 1], [48.6, 32.2, 'small', 0.85],
   ];
   trees.forEach(([x, y, k, s], i) => S.push(new TreeItem(sprites, x, y, k, s, i * 1.7)));
   const hedges: number[][] = [
@@ -431,12 +433,9 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
   };
   chat([[30.2, 56.0], [31.2, 57.2], [29.7, 57.6]]);
   chat([[90.2, 40.2], [91.2, 41.0]]);
-  chat([[41.7, 35.8], [42.7, 36.5]]);
   chat([[54.0, 56.4], [54.2, 57.6]]);
 
   // ------------------------------------------------------------------------------------------------- activities
-  // robots assembling at a bench beside the docks
-  acts.push(new Workbench(env, 33, 43, 29.9, 31.3));
   yard.seed(1, 9);
   acts.push(yard);
   acts.push(new TruckBay(env));
@@ -488,15 +487,13 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
   g.link(fw1, fe[1], CW1);
   const door = g.node(26.8, 58.0, true);
   const p = [g.node(29.2, 58.6), g.node(36, 61.2), g.node(41.2, 61.6), g.node(29.0, 50.0), g.node(41, 50.2)];
-  // the staff door in the dock wing, and the path past the bench round to the street
-  const dockDoor = g.node(31.25, 25.6, true), yardA = g.node(46, 25.6), yardB = g.node(46, 39.4);
+
   g.chain([door, p[0], p[1]]);
   g.link(p[1], p[2], TP);
   g.link(p[2], fw1, TP);
   g.link(p[0], p[3]);
   g.link(p[3], p[4]);
   g.link(p[4], sn[1]);
-  g.chain([dockDoor, yardA, yardB, sn[2]]);
   // the front door of the house on the corner
   // round the plaza hedge to the front door of the house beside the bay
   g.chain([p[0], g.node(28.1, 66.2), g.node(29.9, 73.6), g.node(29.9, 80.4, true)]);

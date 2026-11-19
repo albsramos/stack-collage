@@ -12,16 +12,17 @@ it plays.
   out and leaves by the street.
 - **Loading bay**: a semi pulls into the bay beside the factory and rolls up its curtain side. A forklift and two
   humanoid robots fill it pallet by pallet, then it closes up and drives off across the scene.
-- **Robots**: humanoid robots work a conveyor bench by the docks, carry boxes between the docked trailers, patrol the
+- **Robots**: humanoid robots carry boxes between the docked trailers, help load the semi at the bay, patrol the
   battery yard, work on the construction slab and walk the streets with everyone else.
+- **AI compute**: a platform of 24 server-rack blocks in front of the factory, with blinking status lights and a
+  pulsing cyan glow along its base.
 - **Charging**: cars nose into the chargers, charge (with a pulsing light and cable), back out and leave.
 - **Robotaxi stop**: pods and the van pull into the bay, open their doors, let people off, pick people up and go.
 - **Construction**: a tower crane swings between the material pile and the slab while workers move around.
 - **The home beside the loading bay**: solar roof, wall batteries with breathing status lights, and a carport where
   the car is on its charger.
 - **Ambient detail**: walkers on a walkway network, people chatting, sitting on a bench or playing ball in the park,
-  a dog on a walk, trees swaying, glints sweeping across solar roofs, blinking server racks, a breathing AI-compute
-  glow and pulsing battery status lights.
+  a dog on a walk, trees swaying, glints sweeping across solar roofs and pulsing battery status lights.
 
 There is a light theme and a night theme, and by default the scene matches the page it sits on (see *Dark mode*). Everything is drawn on one `<canvas>`, and the only dependency is React.
 
