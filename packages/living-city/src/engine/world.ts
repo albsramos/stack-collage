@@ -3,10 +3,10 @@
 // Layout (world units ≈ metres). Roads: an avenue along y at x 68–76, a street along x at y 42–50 that bends into
 // the factory road along y at x 44–52. Factory top-left with the AI compute on the plaza in front of it; the dock
 // wing and an open truck yard (gate off the avenue, exit onto the street) top-centre, battery yard top-right;
-// loading bay left; charging lot and construction bottom-centre; pavilion, robotaxi stop and a home with carport
-// bottom-right.
+// a home with carport and the loading bay left; charging lot and construction bottom-centre; pavilion, robotaxi
+// stop and park bottom-right.
 
-import { C, makeRng, pick, rr, type Mat } from './core';
+import { C, makeRng, pick, rr } from './core';
 import { arcPts, box, boxShadow, drawMesh, groundPoly, groundRect, lineW, onFaceX, onFaceY, rectShadow, type Ctx, type R } from './draw';
 import { batteryFront, batteryLed, rackFront, rackLeds, solarGlint, solarRoof, windowsX, windowsY, type Band } from './details';
 import type { Palette } from './palette';
@@ -246,9 +246,9 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
   }
 
   // ------------------------------------------------------------------------------------------------- battery yard
-  // north of the live docks, clear of the yard lane
+  // north of the docks with a clear apron in front of every one of them, and clear of the yard lane
   let bseed = 0;
-  for (let y0 = -1.2; y0 > -22; y0 -= 2.8) {
+  for (let y0 = -6.4; y0 > -26; y0 -= 2.8) {
     for (const [x0, x1] of [[44.4, 50.2], [51.8, 57.6]]) {
       const s = bseed++;
       S.push(new BoxItem(x0, y0, 0, x1, y0 + 1.7, 2.7, pal.bright, { edge }, (r) => batteryFront(r, pal, x0, x1, y0 + 1.7, 2.7)).live((r) => batteryLed(r, pal, x0, x1, y0 + 1.7, 2.7, s)));
@@ -304,67 +304,59 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
   S.push(new BoxItem(82.0, 59.8, 2.5, 84.7, 66.2, 2.72, pal.white, { edge }));
 
   // ------------------------------------------------------------------------------------------------- home: solar roof, batteries, carport charging
+  // on the left, between the factory corner and the loading bay
   S.push(
-    new BoxItem(86.5, 53.6, 0, 94.5, 61, 3.2, pal.white, { edge }, (r) => {
-      windowsY(r, pal, 86.5, 94.5, 61, 3.2, [{ top: 0.3, bot: 3.05, every: 1.6, spans: [[0.4, 7.6]] }]);
-      windowsX(r, pal, 94.5, 53.6, 61, 3.2, [{ top: 0.35, bot: 2.95, every: 1.75, spans: [[0.4, 4.4]] }]);
+    new BoxItem(20.4, 75.6, 0, 28.8, 84.2, 3.2, pal.white, { edge }, (r) => {
+      windowsY(r, pal, 20.4, 28.8, 84.2, 3.2, [{ top: 0.3, bot: 3.05, every: 1.6, spans: [[0.4, 8.0]] }]);
+      windowsX(r, pal, 28.8, 75.6, 84.2, 3.2, [{ top: 0.35, bot: 2.95, every: 1.5, spans: [[5.2, 8.2]] }, { top: 0.7, bot: 3.2, every: 1, spans: [[3.3, 4.3]], dark: true }]);
     }),
   );
   S.push(
-    new BoxItem(86, 53.2, 3.2, 95, 61.6, 6.3, pal.white, { edge }, (r) => {
-      windowsY(r, pal, 86, 95, 61.6, 6.3, [{ top: 0.65, bot: 2.25, every: 1.25, spans: [[0.6, 5.6]] }]);
-      windowsX(r, pal, 95, 53.2, 61.6, 6.3, [{ top: 0.65, bot: 2.25, every: 1.25, spans: [[0.8, 3.8], [5.4, 7.8]] }]);
-      solarRoof(r, pal, 86, 53.2, 95, 61.6, 6.3, 0.45);
-    }).live((r) => solarGlint(r, 86, 53.2, 95, 61.6, 6.3, 0.45, 0.35)),
+    new BoxItem(20, 75.2, 3.2, 29.3, 84.6, 6.3, pal.white, { edge }, (r) => {
+      windowsY(r, pal, 20, 29.3, 84.6, 6.3, [{ top: 0.65, bot: 2.25, every: 1.25, spans: [[0.6, 5.8]] }]);
+      windowsX(r, pal, 29.3, 75.2, 84.6, 6.3, [{ top: 0.65, bot: 2.25, every: 1.25, spans: [[0.8, 3.8], [5.6, 8.6]] }]);
+      solarRoof(r, pal, 20, 75.2, 29.3, 84.6, 6.3, 0.45);
+    }).live((r) => solarGlint(r, 20, 75.2, 29.3, 84.6, 6.3, 0.45, 0.35)),
   );
-  // home batteries on the side wall, facing the carport
-  for (const y of [54.0, 55.15]) {
+  // home batteries on the wall facing the bay
+  for (const y of [81.6, 82.75]) {
     S.push(
-      new BoxItem(94.5, y, 0.15, 94.88, y + 0.95, 1.95, pal.bright, { edge }).live((r) => {
+      new BoxItem(28.8, y, 0.15, 29.18, y + 0.95, 1.95, pal.bright, { edge }).live((r) => {
         const p = 0.5 + 0.5 * Math.sin(r.t * 1.4 + y);
         const ctx = r.ctx;
         ctx.globalAlpha = 0.4 + 0.6 * p;
         ctx.fillStyle = pal.led;
-        const X = (94.88 - (y + 0.48)) * C, Y = (94.88 + y + 0.48) * 0.5 - 1.55;
+        const X = (29.18 - (y + 0.48)) * C, Y = (29.18 + y + 0.48) * 0.5 - 1.55;
         ctx.fillRect(X - 0.04, Y - 0.12, 0.08, 0.24);
         ctx.globalAlpha = 1;
       }),
     );
   }
-  // garden table, two people sitting
-  S.push(new BoxItem(90.0, 62.4, 0, 91.4, 63.6, 0.74, pal.white, { edge }));
-  for (const [x, y, fx] of [[89.35, 63.0, 1], [92.05, 63.0, -1]]) {
-    const w = new Walker('person', pal, rng, x, y);
-    w.stance = 'sit';
-    w.face(fx, 0);
-    crowd.add(w);
-  }
-  // carport with a solar roof: two cars nosed in, one on its charger
-  S.push(new BoxItem(96, 53.2, 2.6, 103, 60.6, 2.85, pal.white, { edge }, (r) => solarRoof(r, pal, 96, 53.2, 103, 60.6, 2.85, 0.35)).live((r) => solarGlint(r, 96, 53.2, 103, 60.6, 2.85, 0.35, 0.8)));
-  for (const [x, y] of [[96.2, 53.4], [102.55, 53.4], [96.2, 60.15], [102.55, 60.15]]) S.push(new BoxItem(x, y, 0, x + 0.26, y + 0.26, 2.6, pal.white));
+  // carport with a solar roof, the car on its charger
+  S.push(new BoxItem(21, 85.4, 2.6, 28.6, 89.6, 2.85, pal.white, { edge }, (r) => solarRoof(r, pal, 21, 85.4, 28.6, 89.6, 2.85, 0.35)).live((r) => solarGlint(r, 21, 85.4, 28.6, 89.6, 2.85, 0.35, 0.8)));
+  for (const [x, y] of [[21.15, 85.55], [28.2, 85.55], [21.15, 89.2], [28.2, 89.2]]) S.push(new BoxItem(x, y, 0, x + 0.25, y + 0.25, 2.6, pal.white));
   S.push(
-    new FnItem(99.3, 59.85, 0, 99.75, 60.25, 1.3, (r) => {
-      box(r, 99.32, 59.88, 0, 99.72, 60.22, 1.25, pal.bright, { edge });
+    new FnItem(21.35, 88.25, 0, 21.75, 88.65, 1.3, (r) => {
+      box(r, 21.38, 88.28, 0, 21.72, 88.62, 1.25, pal.bright, { edge });
       const p = 0.5 + 0.5 * Math.sin(r.t * 2.2);
       const ctx = r.ctx;
       ctx.globalAlpha = 0.45 + 0.55 * p;
       ctx.fillStyle = pal.led;
-      const X = (99.72 - 60.05) * C, Y = (99.72 + 60.05) * 0.5 - 0.95;
+      const X = (21.72 - 88.45) * C, Y = (21.72 + 88.45) * 0.5 - 0.95;
       ctx.fillRect(X - 0.04, Y - 0.1, 0.08, 0.2);
       ctx.globalAlpha = 1;
       ctx.strokeStyle = pal.night ? '#0c0c0e' : '#3b3d44';
       ctx.lineWidth = 0.07;
       ctx.beginPath();
-      const ex = (98.9 - 59.2) * C, ey = (98.9 + 59.2) * 0.5 - 0.75;
+      const ex = (22.5 - 88.2) * C, ey = (22.5 + 88.2) * 0.5 - 0.7;
       ctx.moveTo(X, Y + 0.15);
       ctx.quadraticCurveTo((X + ex) / 2, Y + 0.6, ex, ey);
       ctx.stroke();
     }),
   );
-  const carportCars: [number, Mat, VehicleKind][] = [[97.9, pal.paints[4], 'suv'], [101.1, pal.paints[0], 'car']];
-  for (const [x, paint, kind] of carportCars) {
-    const mats = [paint, pal.carGlass, pal.tyre, pal.headlight, pal.taillight];
-    S.push(new FnItem(x - 1.0, 54.6, 0, x + 1.0, 59.4, 1.65, (r) => drawMesh(r, MESH[kind as 'car'], x, 57.0, 0, 0, 1, mats), (ctx) => rectShadow(ctx, x, 57.0, 0, 1, 2.3, 0.95, 1.2)).still());
+  {
+    const mats = [pal.paints[4], pal.carGlass, pal.tyre, pal.headlight, pal.taillight];
+    S.push(new FnItem(22.2, 86.5, 0, 27.0, 88.5, 1.65, (r) => drawMesh(r, MESH.suv, 24.6, 87.5, 0, -1, 0, mats), (ctx) => rectShadow(ctx, 24.6, 87.5, -1, 0, 2.3, 0.95, 1.2)).still());
   }
 
   // ------------------------------------------------------------------------------------------------- construction site
@@ -408,15 +400,15 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
   const trees: [number, number, 'tree' | 'tree2' | 'poplar' | 'small', number][] = [
     [29.6, 66.4, 'tree', 1], [34.6, 69.0, 'tree2', 0.9], [43.6, 41.2, 'tree', 0.95], [27.6, 44.5, 'poplar', 0.9],
     [65.7, 21.8, 'poplar', 1], [65.7, 33.0, 'poplar', 1], [65.8, -9, 'poplar', 1], [78.7, 16.5, 'tree', 1],
-    [83.5, 56.3, 'tree', 0.95], [95.6, 63.8, 'small', 0.9], [105.5, 52.6, 'tree', 1], [54.0, 82.6, 'small', 0.9],
+    [84.3, 56.6, 'tree', 1], [89.8, 63.4, 'tree2', 1], [99.5, 57.5, 'small', 1], [105.5, 52.6, 'tree', 1], [54.0, 82.6, 'small', 0.9],
     [53.2, 92.5, 'poplar', 0.9], [53.4, 103, 'tree2', 0.9], [31.0, 103.5, 'tree', 1], [31.2, 85.2, 'tree2', 0.95],
-    [27.8, 75.2, 'small', 1], [98.8, 40.0, 'tree2', 0.9], [110, 39.6, 'tree', 1], [78.8, 88.5, 'tree', 1],
+    [18.6, 74.4, 'small', 0.9], [98.8, 40.0, 'tree2', 0.9], [110, 39.6, 'tree', 1], [78.8, 88.5, 'tree', 1],
     [66.3, 88.4, 'small', 0.9], [78.7, 9, 'tree2', 1], [47.8, 33.4, 'small', 0.85],
   ];
   trees.forEach(([x, y, k, s], i) => S.push(new TreeItem(sprites, x, y, k, s, i * 1.7)));
   const hedges: number[][] = [
-    [27.6, 69.6, 33.6, 70.6], [47.0, 37.2, 56.4, 38.2], [54.7, 67.0, 55.3, 79.8], [80.6, 76.0, 81.2, 86.0],
-    [80.8, 38.85, 85.6, 39.35], [91, 38.85, 96.6, 39.35], [86.2, 61.9, 88.6, 62.4],
+    [30.4, 69.6, 34.6, 70.6], [47.0, 37.2, 56.4, 38.2], [54.7, 67.0, 55.3, 79.8], [80.6, 76.0, 81.2, 86.0],
+    [80.8, 38.85, 85.6, 39.35], [91, 38.85, 96.6, 39.35],
   ];
   hedges.forEach((h, i) => S.push(new HedgeItem(sprites, h[0], h[1], h[2], h[3], pal.planter, i)));
   const lamps: number[][] = [
@@ -424,7 +416,7 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
     [94, 39.4, 0, 1.2], [112, 39.4, 0, 1.2], [95.3, 52.6, 0, -1.2], [54.6, 88, -1.2, 0], [41.6, 58, 1.2, 0], [55.0, 39.4, 0, 1.2],
   ];
   for (const [x, y, ax, ay] of lamps) S.push(new LampItem(x, y, ax, ay, pal.steel, pal.factoryDark.right));
-  for (const [x0, y0, x1, y1] of [[31.0, 62.6, 32.8, 63.1], [81.9, 69.2, 82.4, 71.0]]) {
+  for (const [x0, y0, x1, y1] of [[31.0, 62.6, 32.8, 63.1], [81.9, 69.2, 82.4, 71.0], [86.6, 60.9, 88.4, 61.4], [92.2, 57.4, 92.7, 59.2]]) {
     S.push(new BoxItem(x0, y0, 0, x1, y1, 0.45, pal.white, { edge }));
   }
   // people chatting
@@ -453,11 +445,18 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
   lot.seed(2);
   acts.push(lot);
   acts.push(new TaxiStop(env, (w) => crowd.adopt(w)));
-  acts.push(new Park(env, [[84.8, 70.0], [89.0, 67.6]]));
+  acts.push(new Park(env, [[91, 56], [96, 53.6]]));
+  // two people on a park bench
+  for (const x of [87.0, 87.95]) {
+    const w = new Walker('person', pal, rng, x, 61.75);
+    w.stance = 'sit';
+    w.face(0, 1);
+    crowd.add(w);
+  }
   // dock and yard robots
   acts.push(new Looper(env, 'robot', () => [{ x: 30.9, y: 13.6, wait: 0.8, then: (w) => (w.carry = true) }, { x: 32.4, y: 13.4, wait: 0.8, then: (w) => (w.carry = false) }], 30.9, 13.6));
   acts.push(new Looper(env, 'robot', () => [{ x: 30.9, y: 19.4, wait: 0.9, then: (w) => (w.carry = true) }, { x: 36.4, y: 19.5, wait: 0.8, then: (w) => (w.carry = false) }], 30.9, 19.4));
-  acts.push(new Looper(env, 'robot', () => [{ x: 51, y: 0.6, wait: 3 }, { x: 51, y: -6.5, wait: 4 }, { x: 51, y: -12.2, wait: 3 }], 51, -3));
+  acts.push(new Looper(env, 'robot', () => [{ x: 51, y: -4.6, wait: 3 }, { x: 51, y: -10.5, wait: 4 }, { x: 51, y: -16.2, wait: 3 }], 51, -8));
 
   // ------------------------------------------------------------------------------------------------- walkways
   const g = graph;
@@ -499,7 +498,8 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
   g.link(p[4], sn[1]);
   g.chain([dockDoor, yardA, yardB, sn[2]]);
   // the front door of the house on the corner
-  g.link(g.node(90.5, 53.0, true), sse[1]);
+  // round the plaza hedge to the front door of the house beside the bay
+  g.chain([p[0], g.node(28.1, 66.2), g.node(29.9, 73.6), g.node(29.9, 80.4, true)]);
   const pd = g.node(88.6, 38.8, true);
   g.link(pd, sne[0]);
   // round the west side of the house and along its garden
@@ -581,7 +581,7 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
     groundRect(ctx, 54.5, 53, 66, 80.6);
     groundRect(ctx, 58.4, 50, 62.4, 53.2);
     groundRect(ctx, 51.8, 58.6, 54.7, 63.6);
-    groundRect(ctx, 96, 50.2, 103, 53.4);
+    groundRect(ctx, 28.6, 85.2, 30, 89.8);
     groundRect(ctx, 54.5, 84.2, 66.4, 120);
     ctx.fill();
     // the truck's way out across the plaza corner

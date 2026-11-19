@@ -17,9 +17,9 @@ it plays.
 - **Charging**: cars nose into the chargers, charge (with a pulsing light and cable), back out and leave.
 - **Robotaxi stop**: pods and the van pull into the bay, open their doors, let people off, pick people up and go.
 - **Construction**: a tower crane swings between the material pile and the slab while workers move around.
-- **The home on the corner**: solar roof, wall batteries with breathing status lights, and a carport where one car is
-  on its charger.
-- **Ambient detail**: walkers on a walkway network, people chatting, sitting in a garden or playing ball,
+- **The home beside the loading bay**: solar roof, wall batteries with breathing status lights, and a carport where
+  the car is on its charger.
+- **Ambient detail**: walkers on a walkway network, people chatting, sitting on a bench or playing ball in the park,
   a dog on a walk, trees swaying, glints sweeping across solar roofs, blinking server racks, a breathing AI-compute
   glow and pulsing battery status lights.
 

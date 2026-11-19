@@ -58,7 +58,7 @@
   .page { max-width: 1320px; margin: 0 auto; display: grid; gap: 22px; }
 
   header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 32px; }
-  .eyebrow { margin: 0 0 6px; font: 500 12px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .eyebrow { margin: 0 0 8px; font: 500 12px/1.5 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
   h1 { margin: 0; font: 600 clamp(28px, 4vw, 40px)/1.05 var(--font-display); letter-spacing: -0.02em; text-wrap: balance; }
   .lede { margin: 0; max-width: 58ch; color: var(--muted); }
 
@@ -92,7 +92,8 @@
   .panel { min-width: 0; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); padding: 18px 20px; display: grid; gap: 12px; align-content: start; }
   h2 { margin: 0; font: 600 18px/1.2 var(--font-display); letter-spacing: -0.01em; }
   .panel p { margin: 0; color: var(--muted); max-width: 62ch; }
-  .code { position: relative; min-width: 0; }
+  .code { min-width: 0; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .panel > * { min-width: 0; }
   pre {
     margin: 0; overflow-x: auto; padding: 14px 16px; border-radius: 12px; background: var(--code-bg); border: 1px solid var(--line);
@@ -101,8 +102,8 @@
   .tok-k { color: var(--accent); }
   .tok-s { color: var(--muted); }
   .copy {
-    position: absolute; top: 8px; right: 8px; font: 500 12px/1 var(--font-body); color: var(--muted);
-    background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; cursor: pointer;
+    font: 500 12px/1 var(--font-body); color: var(--muted);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; cursor: pointer;
   }
   .copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   ol { margin: 0; padding-left: 1.2em; display: grid; gap: 8px; color: var(--muted); }
@@ -115,7 +116,7 @@
       <p class="eyebrow">React component · one canvas · no other dependencies</p>
       <h1>Living City</h1>
     </div>
-    <p class="lede">The campus illustration, running. Semis get loaded at the bay, robotaxis swap passengers, cars charge, the crane swings and humanoid robots work and walk among people. It follows this page's light or dark mode on its own.</p>
+    <p class="lede">The campus illustration, running. Semis back into the factory docks and get loaded at the bay, robotaxis swap passengers, cars charge, the crane swings and humanoid robots work and walk among people. It follows this page's light or dark mode on its own.</p>
   </header>
 
   <section class="stage" aria-label="Live scene">
@@ -148,14 +149,16 @@
 
   <section class="usage">
     <div class="panel">
-      <h2>Drop it in</h2>
+      <div class="panel-head">
+        <h2>Drop it in</h2>
+        <button type="button" class="copy" id="copy">Copy code</button>
+      </div>
       <div class="code">
         <pre id="snippet"><span class="tok-k">import</span> { LivingCity } <span class="tok-k">from</span> <span class="tok-s">'living-city'</span>;
 
 <span class="tok-k">export function</span> Hero() {
   <span class="tok-k">return</span> &lt;LivingCity style={{ borderRadius: 24 }} /&gt;;
 }</pre>
-        <button type="button" class="copy" id="copy">Copy</button>
       </div>
       <p>It takes the full width of its container and keeps the scene's 1.86 : 1 shape. Give it a height and it fills that box instead, cropping the edges. It pauses while scrolled out of view.</p>
     </div>
@@ -236,7 +239,7 @@
     document.getElementById('copy').addEventListener('click', function () {
       var btn = this;
       var text = document.getElementById('snippet').textContent;
-      var done = function () { btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = 'Copy'; }, 1600); };
+      var done = function () { btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = 'Copy code'; }, 1600); };
       var select = function () {
         var r = document.createRange(); r.selectNodeContents(document.getElementById('snippet'));
         var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = 'Selected';
