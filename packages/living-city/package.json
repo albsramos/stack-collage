@@ -1,0 +1,37 @@
+{
+  "name": "living-city",
+  "version": "0.1.0",
+  "description": "A self-running isometric city scene for React: cars drive, trucks get loaded, humanoid robots walk around. One component, no text, no dependencies besides React.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "sideEffects": false,
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build && tsc -p tsconfig.build.json",
+    "build:demo": "vite build --mode demo",
+    "typecheck": "tsc -p . --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=17"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.6"
+  },
+  "license": "MIT"
+}
