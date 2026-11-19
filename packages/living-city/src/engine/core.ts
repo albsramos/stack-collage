@@ -45,6 +45,13 @@ export function css(c: RGB, a = 1): string {
   return a >= 1 ? `rgb(${c255(c[0])},${c255(c[1])},${c255(c[2])})` : `rgba(${c255(c[0])},${c255(c[1])},${c255(c[2])},${a})`;
 }
 
+/** Parse '#rrggbb' or 'rgb(r,g,b)'. */
+export function parse(c: string): RGB {
+  if (c[0] === '#') return hex(c);
+  const m = c.match(/[\d.]+/g);
+  return m ? [Number(m[0]), Number(m[1]), Number(m[2])] : [128, 128, 128];
+}
+
 export function mix(a: RGB, b: RGB, t: number): RGB {
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 }

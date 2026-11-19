@@ -1,10 +1,20 @@
 // People and humanoid robots: drawn as tiny clay figures with a walk cycle, steered along a walkway graph.
 
-import { C, css, mix, pick, rr, type RGB, type Rng } from './core';
+import { C, css, mix, parse, pick, rr, type RGB, type Rng } from './core';
 import { blobShadow, box, type Ctx, type R } from './draw';
 import type { Palette } from './palette';
 import type { Item } from './sort';
 import type { Zone } from './vehicles';
+import { inShadow } from './shade';
+
+/** a colour as it looks in a building's shadow */
+const shadeCache = new Map<string, string>();
+function shaded(c: string, night: boolean) {
+  const k = c + (night ? 'n' : 'd');
+  let v = shadeCache.get(k);
+  if (!v) shadeCache.set(k, (v = css(mix(parse(c), night ? [0, 0, 0] : [58, 60, 78], night ? 0.3 : 0.16))));
+  return v;
+}
 
 export type WalkerKind = 'person' | 'robot';
 
@@ -192,11 +202,14 @@ export class Walker implements Item {
     const pX = -dY * 0.07 * k, pY = dX * 0.035 * k; // a little apart, sideways
     const stride = (robot ? 0.27 : 0.3) * k;
     const carryFront = this.hx + this.hy > 0;
+    // standing in a building's shadow
+    const dim = !!r.casters && inShadow(this.x, this.y, this.z + 1.2 * k, r.casters);
+    const tone = (c: string) => (dim ? shaded(c, r.night) : c);
 
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     // legs
-    ctx.strokeStyle = this.legs;
+    ctx.strokeStyle = tone(this.legs);
     ctx.lineWidth = (robot ? 0.17 : 0.15) * k;
     ctx.beginPath();
     if (sit) {
@@ -220,7 +233,7 @@ export class Walker implements Item {
     // the box sits in front of the chest; behind the body when walking away from the camera
     if (this.carry && !carryFront) this.drawCarry(r);
     // arms
-    ctx.strokeStyle = this.arm;
+    ctx.strokeStyle = tone(this.arm);
     ctx.lineWidth = (robot ? 0.12 : 0.11) * k;
     ctx.beginPath();
     const work = this.stance === 'work';
@@ -252,7 +265,7 @@ export class Walker implements Item {
     if (robot) {
       const w0 = 0.25 * k, w1 = 0.17 * k;
       const top = shY - 0.04 * k, bot = Y - hip - bob + 0.02 * k;
-      ctx.fillStyle = this.body;
+      ctx.fillStyle = tone(this.body);
       ctx.beginPath();
       ctx.moveTo(tX - w0, top);
       ctx.lineTo(tX + w0, top);
@@ -269,7 +282,7 @@ export class Walker implements Item {
       ctx.stroke();
       // head
       const hy = shY - 0.28 * k;
-      ctx.fillStyle = this.head;
+      ctx.fillStyle = tone(this.head);
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(tX - 0.12 * k, hy - 0.14 * k, 0.24 * k, 0.28 * k, 0.09 * k);
       else ctx.rect(tX - 0.12 * k, hy - 0.14 * k, 0.24 * k, 0.28 * k);
@@ -280,19 +293,19 @@ export class Walker implements Item {
       ctx.arc(tX - 0.02 * k, hy - 0.02 * k, 0.07 * k, Math.PI * 1.05, Math.PI * 1.6);
       ctx.stroke();
     } else {
-      ctx.strokeStyle = this.body;
+      ctx.strokeStyle = tone(this.body);
       ctx.lineWidth = 0.4 * k;
       ctx.beginPath();
       ctx.moveTo(tX, Y - hip - bob - 0.13 * k);
       ctx.lineTo(tX, shY + 0.05 * k);
       ctx.stroke();
-      ctx.strokeStyle = this.bodyShade;
+      ctx.strokeStyle = tone(this.bodyShade);
       ctx.lineWidth = 0.12 * k;
       ctx.beginPath();
       ctx.moveTo(tX + 0.12 * k, Y - hip - bob - 0.1 * k);
       ctx.lineTo(tX + 0.12 * k, shY + 0.08 * k);
       ctx.stroke();
-      ctx.fillStyle = this.head;
+      ctx.fillStyle = tone(this.head);
       ctx.beginPath();
       ctx.arc(tX, shY - 0.26 * k, 0.14 * k, 0, Math.PI * 2);
       ctx.fill();

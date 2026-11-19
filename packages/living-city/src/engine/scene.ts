@@ -195,7 +195,7 @@ export class Scene {
     const img = makeCanvas(W, H);
     const g = img.getContext('2d') as CanvasRenderingContext2D;
     g.setTransform(k, 0, 0, k, this.tx - px0, this.ty - py0);
-    it.draw({ ctx: g, t: 0, hair: 0.7 / k, scale: k, night: this.pal.night });
+    it.draw({ ctx: g, t: 0, hair: 0.7 / k, scale: k, night: this.pal.night, casters: this.world.casters, faceShadow: this.pal.faceShadow });
     return { img, x: (px0 - this.tx) / k, y: (py0 - this.ty) / k, w: W / k, h: H / k };
   }
 
@@ -286,7 +286,7 @@ export class Scene {
   }
 
   private r(ctx: CanvasRenderingContext2D): R {
-    return { ctx, t: this.t, hair: 0.7 / this.scale, scale: this.scale, night: this.pal.night };
+    return { ctx, t: this.t, hair: 0.7 / this.scale, scale: this.scale, night: this.pal.night, casters: this.world.casters, faceShadow: this.pal.faceShadow };
   }
 
   render() {

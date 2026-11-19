@@ -1,6 +1,7 @@
 // Drawing primitives in design space (the camera transform is already on the context).
 
 import { C, Mat, SHADOW_DX, SHADOW_DY, lightT } from './core';
+import { shadeFace, type Caster } from './shade';
 
 export type Ctx = CanvasRenderingContext2D;
 
@@ -14,6 +15,9 @@ export interface R {
   /** Device pixels per design unit. */
   scale: number;
   night: boolean;
+  /** buildings whose shadows fall on other objects, and the tint for the shaded part of a face */
+  casters?: readonly Caster[];
+  faceShadow?: string;
 }
 
 function quadPath(ctx: Ctx, ax: number, ay: number, bx: number, by: number, cx: number, cy: number, dx: number, dy: number) {
@@ -45,7 +49,7 @@ export interface BoxStyle {
 }
 
 /** An axis-aligned box. Only the three faces that face the camera are drawn. */
-export function box(r: R, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, m: Mat, st?: BoxStyle) {
+export function box(r: R, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, m: Mat, st?: BoxStyle, owner?: unknown) {
   const X00 = (x0 - y0) * C, X10 = (x1 - y0) * C, X11 = (x1 - y1) * C, X01 = (x0 - y1) * C;
   const Y00 = (x0 + y0) * 0.5, Y10 = (x1 + y0) * 0.5, Y11 = (x1 + y1) * 0.5, Y01 = (x0 + y1) * 0.5;
   const top = st?.top ?? m.top, left = st?.left ?? m.left, right = st?.right ?? m.right;
@@ -54,6 +58,15 @@ export function box(r: R, x0: number, y0: number, z0: number, x1: number, y1: nu
     fillQuad(r, right, X11, Y11 - z1, X10, Y10 - z1, X10, Y10 - z0, X11, Y11 - z0);
   }
   fillQuad(r, top, X00, Y00 - z1, X10, Y10 - z1, X11, Y11 - z1, X01, Y01 - z1);
+  // shadows from nearby buildings on each visible face
+  if (r.casters?.length && r.faceShadow) {
+    const f = r.faceShadow;
+    if (z1 - z0 > 0.001) {
+      shadeFace(r.ctx, [x0, y1, z1, x1, y1, z1, x1, y1, z0, x0, y1, z0], r.casters, f, owner);
+      shadeFace(r.ctx, [x1, y1, z1, x1, y0, z1, x1, y0, z0, x1, y1, z0], r.casters, f, owner);
+    }
+    shadeFace(r.ctx, [x0, y0, z1, x1, y0, z1, x1, y1, z1, x0, y1, z1], r.casters, f, owner);
+  }
   const edge = st?.edge;
   if (edge) {
     const ctx = r.ctx;
@@ -250,6 +263,8 @@ export class MeshBuilder {
 export type MatSlot = Mat | string;
 
 const SCR = new Float64Array(3 * 256);
+const WLD = new Float64Array(3 * 256);
+const FACE: number[] = [];
 
 /**
  * Draw a mesh at (px, py, pz) facing (hx, hy). Faces turned away from the camera are skipped, so each convex
@@ -264,7 +279,14 @@ export function drawMesh(r: R, m: Mesh, px: number, py: number, pz: number, hx: 
     const y = py + l * hy + w * hx;
     SCR[i * 2] = (x - y) * C;
     SCR[i * 2 + 1] = (x + y) * 0.5 - z - pz;
+    WLD[i * 3] = x;
+    WLD[i * 3 + 1] = y;
+    WLD[i * 3 + 2] = z + pz;
   }
+  // only bother with building shadows when one could reach this mesh
+  let near = false;
+  if (r.casters && r.faceShadow) for (const c of r.casters) if (px > c.bx0 - 8 && px < c.bx1 + 8 && py > c.by0 - 8 && py < c.by1 + 8) near = true;
+  SHADE = near;
   const ctx = r.ctx;
   ctx.lineWidth = r.hair;
   ctx.lineJoin = 'round';
@@ -284,6 +306,7 @@ export function drawMesh(r: R, m: Mesh, px: number, py: number, pz: number, hx: 
 }
 
 const ORDER: (Part & { d?: number })[] = [];
+let SHADE = false;
 
 function drawFaces(r: R, m: Mesh, s: number, e: number, hx: number, hy: number, mats: MatSlot[]) {
   const ctx = r.ctx;
@@ -303,6 +326,11 @@ function drawFaces(r: R, m: Mesh, s: number, e: number, hx: number, hy: number, 
     ctx.fill();
     ctx.strokeStyle = fill;
     ctx.stroke();
+    if (SHADE) {
+      FACE.length = 0;
+      for (const k of idx) FACE.push(WLD[k * 3], WLD[k * 3 + 1], WLD[k * 3 + 2]);
+      shadeFace(ctx, FACE, r.casters!, r.faceShadow!);
+    }
   }
 }
 

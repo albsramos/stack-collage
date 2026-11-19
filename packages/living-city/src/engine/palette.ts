@@ -13,6 +13,8 @@ export interface Palette {
   curbHi: string;
   curbLo: string;
   shadow: string;
+  /** tint over the part of an object that a building's shadow falls on */
+  faceShadow: string;
   ao: string;
   // solids
   white: Mat;
@@ -70,6 +72,7 @@ export function lightPalette(): Palette {
     curbHi: '#f9f9fb',
     curbLo: '#cfd0d7',
     shadow: 'rgba(84, 86, 104, 0.15)',
+    faceShadow: 'rgba(70, 72, 96, 0.17)',
     ao: 'rgba(70, 72, 92, 0.2)',
     white: mat('#fbfbfc'),
     bright: mat('#ffffff', 0.15),
@@ -131,6 +134,7 @@ export function darkPalette(): Palette {
     curbHi: '#2c2e35',
     curbLo: '#0e0f12',
     shadow: 'rgba(0, 0, 0, 0.34)',
+    faceShadow: 'rgba(0, 0, 0, 0.3)',
     ao: 'rgba(0, 0, 0, 0.45)',
     white: mat('#43454e', 0.36),
     bright: mat('#4e505a', 0.34),

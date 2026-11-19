@@ -13,6 +13,7 @@ import type { Palette } from './palette';
 import { Path } from './path';
 import type { Item } from './sort';
 import type { Sprites } from './sprites';
+import { caster, type Caster } from './shade';
 import { BoxItem, FnItem, HedgeItem, LampItem, TreeItem, type Static } from './statics';
 import { MESH, Traffic, junction, sameKind, type VehicleKind } from './vehicles';
 import { Crowd, WalkGraph, Walker } from './walkers';
@@ -20,6 +21,8 @@ import { ChargingLot, Crane, Looper, Park, TaxiStop, TruckBay, TruckYard, type A
 
 export interface World {
   statics: Static[];
+  /** tall buildings whose shadows fall on the objects around them */
+  casters: Caster[];
   traffic: Traffic;
   crowd: Crowd;
   acts: Activity[];
@@ -725,5 +728,12 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
     for (const a of acts) a.shadows?.(ctx);
   };
 
-  return { statics: S, traffic, crowd, acts, ground, update, items, shadows };
+  // buildings tall and big enough for their shadow to fall across their neighbours; an upper storey counts as
+  // standing on the ground (it sits on the floor below), a roof on posts doesn't count
+  const tall = (s: BoxItem) => (s.z0 === 0 && s.z1 >= 3) || (s.z0 <= 3.6 && s.z1 >= 5);
+  const casters = S.filter((s): s is BoxItem => s instanceof BoxItem && tall(s) && (s.x1 - s.x0) * (s.y1 - s.y0) >= 20).map(
+    (b) => caster(b.x0, b.y0, b.x1, b.y1, b.z1, b),
+  );
+
+  return { statics: S, casters, traffic, crowd, acts, ground, update, items, shadows };
 }

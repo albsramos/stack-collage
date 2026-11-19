@@ -30,7 +30,7 @@ export class BoxItem implements Static {
     readonly castShadow = true,
   ) {}
   draw(r: R) {
-    box(r, this.x0, this.y0, this.z0, this.x1, this.y1, this.z1, this.m, this.st);
+    box(r, this.x0, this.y0, this.z0, this.x1, this.y1, this.z1, this.m, this.st, this);
     this.deco?.(r, this);
   }
   /** Add animated details (lights, glints) drawn live over the baked box. */
