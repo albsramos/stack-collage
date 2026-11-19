@@ -18,7 +18,7 @@ it plays.
   a dog on a walk, trees swaying, glints sweeping across solar roofs, blinking server racks, a breathing AI-compute
   glow and pulsing battery status lights.
 
-There is a light theme and a night theme. Everything is drawn on one `<canvas>`, and the only dependency is React.
+There is a light theme and a night theme, and by default the scene matches the page it sits on (see *Dark mode*). Everything is drawn on one `<canvas>`, and the only dependency is React.
 
 ![The scene in the night theme](docs/preview-dark.jpg)
 
@@ -38,7 +38,7 @@ it a height, or put it in a sized box, and it fills that instead, cropping the e
 
 ```tsx
 <div style={{ height: '70vh' }}>
-  <LivingCity style={{ height: '100%' }} theme="auto" density={0.8} />
+  <LivingCity style={{ height: '100%' }} density={0.8} />
 </div>
 ```
 
@@ -46,7 +46,7 @@ it a height, or put it in a sized box, and it fills that instead, cropping the e
 
 | Prop | Default | |
 |---|---|---|
-| `theme` | `'light'` | `'light'`, `'dark'` (night), or `'auto'` to follow the visitor's colour scheme |
+| `theme` | `'auto'` | `'auto'` matches the page around it (see *Dark mode*). `'light'` or `'dark'` (night) fixes one look |
 | `speed` | `1` | Simulation speed. `0.5` is calm, `2` is busy |
 | `density` | `1` | How many people and cars, from `0.3` to `1.5` |
 | `seed` | `7` | Changes who walks where and which cars appear |
@@ -58,6 +58,22 @@ it a height, or put it in a sized box, and it fills that instead, cropping the e
 | `respectReducedMotion` | `true` | Hold still when the visitor has asked for reduced motion |
 | `label` | none | Accessible description. Without it the scene is treated as decorative (`aria-hidden`) |
 | `className`, `style` | none | Applied to the wrapper `div` |
+
+### Dark mode
+
+With `theme="auto"` (the default) the scene takes the theme of the page around it, checking these in order:
+
+1. A `data-theme` attribute on the nearest ancestor that has one, set to `"dark"` or `"light"`. Bootstrap's
+   `data-bs-theme`, `data-color-scheme`, `data-mode` and `data-mantine-color-scheme` count too.
+2. A `dark` or `light` class on `<html>` or `<body>`, which is what Tailwind's class strategy and next-themes set.
+3. The visitor's system setting (`prefers-color-scheme`).
+
+It watches those attributes, classes and the system setting, so a theme toggle on your site switches the scene as
+well. The outgoing frame dissolves into the new one over about half a second. Before the first frame, the box shows
+the theme's ground colour, so it doesn't flash white in a dark layout.
+
+The same logic is exported as `resolveTheme(element)` and `watchTheme(element, onChange)` if you drive the engine
+yourself.
 
 ### Behaviour worth knowing
 
@@ -100,6 +116,7 @@ npm install
 npm run dev        # demo page with theme, speed and density controls
 npm run build      # library build into dist/
 npm run typecheck
+npm run build:artifact   # artifact-dist/living-city.html: a self-contained demo page (React from cdnjs)
 ```
 
 The demo has two extra views: `?gallery` shows every vehicle at eight headings, and `?debug` exposes the scene as

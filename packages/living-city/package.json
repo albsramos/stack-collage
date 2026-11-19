@@ -13,13 +13,17 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "sideEffects": false,
   "scripts": {
     "dev": "vite --host",
     "build": "vite build && tsc -p tsconfig.build.json",
     "build:demo": "vite build --mode demo",
-    "typecheck": "tsc -p . --noEmit"
+    "typecheck": "tsc -p . --noEmit",
+    "build:artifact": "node scripts/build-artifact.mjs"
   },
   "peerDependencies": {
     "react": ">=17"

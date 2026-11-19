@@ -44,6 +44,9 @@ export const DEFAULTS: SceneOptions = {
 export const FRAME = { cx: 0, cy: 47.5, w: 121.2, h: 65 };
 export const ASPECT = FRAME.w / FRAME.h;
 
+/** seconds a theme change takes to dissolve */
+const FADE = 0.6;
+
 type AnyCanvas = HTMLCanvasElement | OffscreenCanvas;
 
 interface Baked {
@@ -84,6 +87,9 @@ export class Scene {
   private all: Item[] = [];
   private order: Item[] = [];
   private destroyed = false;
+  /** the last frame of the previous theme, dissolving away */
+  private fade: AnyCanvas | null = null;
+  private fadeT = 0;
 
   constructor(private canvas: HTMLCanvasElement, opts: Partial<SceneOptions> = {}) {
     this.opts = { ...DEFAULTS, ...opts };
@@ -101,6 +107,14 @@ export class Scene {
     this.opts = { ...prev, ...opts };
     const o = this.opts;
     if (o.theme !== prev.theme) {
+      // keep the outgoing frame and dissolve it over the new theme
+      if (this.cssW && this.canvas.width > 1) {
+        if (!this.fade || this.fade.width !== this.canvas.width || this.fade.height !== this.canvas.height) this.fade = makeCanvas(this.canvas.width, this.canvas.height);
+        const f = this.fade.getContext('2d') as CanvasRenderingContext2D;
+        f.setTransform(1, 0, 0, 1, 0, 0);
+        f.drawImage(this.canvas, 0, 0);
+        this.fadeT = FADE;
+      }
       this.pal = o.theme === 'dark' ? darkPalette() : lightPalette();
       this.rebuild();
     } else if (o.seed !== prev.seed || o.density !== prev.density) this.rebuild();
@@ -187,7 +201,7 @@ export class Scene {
 
   private sync() {
     if (this.destroyed || !this.cssW) return;
-    const run = !this.opts.paused && this.visible;
+    const run = this.visible && (!this.opts.paused || this.fadeT > 0);
     if (run && !this.raf) {
       this.last = 0;
       this.raf = requestAnimationFrame(this.loop);
@@ -202,13 +216,18 @@ export class Scene {
     this.raf = requestAnimationFrame(this.loop);
     const dt = this.last ? Math.min(0.1, (now - this.last) / 1000) : 0;
     this.last = now;
-    let rem = dt * this.opts.speed;
+    let rem = this.opts.paused ? 0 : dt * this.opts.speed;
     while (rem > 1e-6) {
       const h = Math.min(rem, 1 / 30);
       this.step(h);
       rem -= h;
     }
     this.render();
+    if (this.fadeT > 0) {
+      this.fadeT = Math.max(0, this.fadeT - dt);
+      // a paused scene only kept running for the dissolve
+      if (this.fadeT === 0 && this.opts.paused) this.sync();
+    }
   };
 
   private step(dt: number) {
@@ -296,6 +315,13 @@ export class Scene {
       if (s.bake) this.stamp(s, r);
       else it.draw(r);
       s.overlay?.(r);
+    }
+    if (this.fade && this.fadeT > 0) {
+      const k = this.fadeT / FADE;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = k * k * (3 - 2 * k);
+      ctx.drawImage(this.fade as CanvasImageSource, 0, 0, this.canvas.width, this.canvas.height);
+      ctx.globalAlpha = 1;
     }
   }
 

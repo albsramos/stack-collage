@@ -1,0 +1,249 @@
+<title>Living City</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one column — the live scene as a wide card, its controls directly under it, then how to use it. */
+  :root {
+    --bg: #f3f3f5;
+    --surface: #ffffff;
+    --fg: #1e1f24;
+    --muted: #686a75;
+    --line: #e1e1e7;
+    --accent: #9a7234;
+    --accent-soft: #f4ead8;
+    --code-bg: #f7f7f9;
+    --shadow: 0 1px 2px rgba(30, 31, 40, 0.06), 0 12px 40px rgba(30, 31, 40, 0.08);
+    --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+    --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111216;
+      --surface: #1a1b20;
+      --fg: #e8e8ed;
+      --muted: #9c9ea9;
+      --line: #2a2c33;
+      --accent: #e2bd7e;
+      --accent-soft: #2e2719;
+      --code-bg: #15161a;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 40px rgba(0, 0, 0, 0.35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111216;
+    --surface: #1a1b20;
+    --fg: #e8e8ed;
+    --muted: #9c9ea9;
+    --line: #2a2c33;
+    --accent: #e2bd7e;
+    --accent-soft: #2e2719;
+    --code-bg: #15161a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 40px rgba(0, 0, 0, 0.35);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font: 15px/1.55 var(--font-body);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 28px 56px;
+  }
+  .page { max-width: 1320px; margin: 0 auto; display: grid; gap: 22px; }
+
+  header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 32px; }
+  .eyebrow { margin: 0 0 6px; font: 500 12px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  h1 { margin: 0; font: 600 clamp(28px, 4vw, 40px)/1.05 var(--font-display); letter-spacing: -0.02em; text-wrap: balance; }
+  .lede { margin: 0; max-width: 58ch; color: var(--muted); }
+
+  .stage { border-radius: 22px; overflow: hidden; box-shadow: var(--shadow); background: var(--surface); max-width: 100%; }
+
+  .controls {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 14px 28px;
+    padding: 14px 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface);
+  }
+  .group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; min-width: 0; }
+  .label { font: 500 12px/1 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); }
+  .seg button {
+    font: 500 13px/1 var(--font-body); color: var(--muted); background: transparent; border: 0; border-radius: 999px;
+    padding: 7px 13px; cursor: pointer; white-space: nowrap;
+  }
+  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+  .seg button:focus-visible, .btn:focus-visible, input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .resolved { font-size: 13px; color: var(--muted); }
+  .resolved b { color: var(--fg); font-weight: 500; }
+  input[type="range"] { width: 120px; accent-color: var(--accent); }
+  .value { font: 500 13px/1 var(--font-mono); font-variant-numeric: tabular-nums; min-width: 3.2em; color: var(--fg); }
+  .btn {
+    font: 500 13px/1 var(--font-body); color: var(--fg); background: var(--accent-soft); border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 16px; cursor: pointer; margin-left: auto;
+  }
+  .note { margin: -8px 0 0; font-size: 13px; color: var(--muted); }
+
+  .usage { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 22px; }
+  @media (max-width: 860px) { .usage { grid-template-columns: minmax(0, 1fr); } .btn { margin-left: 0; } }
+  .panel { min-width: 0; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); padding: 18px 20px; display: grid; gap: 12px; align-content: start; }
+  h2 { margin: 0; font: 600 18px/1.2 var(--font-display); letter-spacing: -0.01em; }
+  .panel p { margin: 0; color: var(--muted); max-width: 62ch; }
+  .code { position: relative; min-width: 0; }
+  .panel > * { min-width: 0; }
+  pre {
+    margin: 0; overflow-x: auto; padding: 14px 16px; border-radius: 12px; background: var(--code-bg); border: 1px solid var(--line);
+    font: 13px/1.6 var(--font-mono); color: var(--fg);
+  }
+  .tok-k { color: var(--accent); }
+  .tok-s { color: var(--muted); }
+  .copy {
+    position: absolute; top: 8px; right: 8px; font: 500 12px/1 var(--font-body); color: var(--muted);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; cursor: pointer;
+  }
+  .copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  ol { margin: 0; padding-left: 1.2em; display: grid; gap: 8px; color: var(--muted); }
+  ol code, p code { font: 12.5px var(--font-mono); color: var(--fg); background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 1px 5px; }
+</style>
+
+<main class="page">
+  <header>
+    <div>
+      <p class="eyebrow">React component · one canvas · no other dependencies</p>
+      <h1>Living City</h1>
+    </div>
+    <p class="lede">The campus illustration, running. Semis get loaded at the bay, robotaxis swap passengers, cars charge, the crane swings and humanoid robots work and walk among people. It follows this page's light or dark mode on its own.</p>
+  </header>
+
+  <section class="stage" aria-label="Live scene">
+    <div id="scene"></div>
+  </section>
+
+  <div class="controls" role="group" aria-label="Scene controls">
+    <div class="group">
+      <span class="label" id="theme-label">Theme</span>
+      <div class="seg" role="group" aria-labelledby="theme-label">
+        <button type="button" id="theme-auto" data-theme-choice="auto" aria-pressed="true">Match page</button>
+        <button type="button" id="theme-light" data-theme-choice="light" aria-pressed="false">Light</button>
+        <button type="button" id="theme-dark" data-theme-choice="dark" aria-pressed="false">Night</button>
+      </div>
+      <span class="resolved" id="resolved">Showing <b>light</b></span>
+    </div>
+    <div class="group">
+      <label class="label" for="speed">Speed</label>
+      <input type="range" id="speed" min="0.25" max="3" step="0.25" value="1">
+      <span class="value" id="speed-value">1×</span>
+    </div>
+    <div class="group">
+      <label class="label" for="density">Crowd</label>
+      <input type="range" id="density" min="0.3" max="1.5" step="0.1" value="1">
+      <span class="value" id="density-value">1.0</span>
+    </div>
+    <button type="button" class="btn" id="play">Pause</button>
+  </div>
+  <p class="note" id="motion-note" hidden>Your device asks for reduced motion, so the scene starts still. Press Play to run it.</p>
+
+  <section class="usage">
+    <div class="panel">
+      <h2>Drop it in</h2>
+      <div class="code">
+        <pre id="snippet"><span class="tok-k">import</span> { LivingCity } <span class="tok-k">from</span> <span class="tok-s">'living-city'</span>;
+
+<span class="tok-k">export function</span> Hero() {
+  <span class="tok-k">return</span> &lt;LivingCity style={{ borderRadius: 24 }} /&gt;;
+}</pre>
+        <button type="button" class="copy" id="copy">Copy</button>
+      </div>
+      <p>It takes the full width of its container and keeps the scene's 1.86 : 1 shape. Give it a height and it fills that box instead, cropping the edges. It pauses while scrolled out of view.</p>
+    </div>
+    <div class="panel">
+      <h2>Dark mode</h2>
+      <p>By default the component matches the page around it, in this order:</p>
+      <ol>
+        <li>A <code>data-theme</code> on any ancestor, or <code>data-bs-theme</code>, <code>data-color-scheme</code>, <code>data-mode</code> or <code>data-mantine-color-scheme</code>, set to <code>"dark"</code> or <code>"light"</code></li>
+        <li>A <code>dark</code> or <code>light</code> class on <code>&lt;html&gt;</code> or <code>&lt;body&gt;</code>, as Tailwind and next-themes do</li>
+        <li>The visitor's system setting</li>
+      </ol>
+      <p>It notices changes as they happen and dissolves into the new look. Pass <code>theme="light"</code> or <code>theme="dark"</code> to fix one.</p>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script>/*BUNDLE*/</script>
+<script>
+  (function () {
+    var Lib = window.LivingCityLib;
+    var mount = document.getElementById('scene');
+    var reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    var state = { theme: 'auto', speed: 1, density: 1, paused: false, runAnyway: false };
+    var root = ReactDOM.createRoot(mount);
+
+    function stillForMotion() { return reduced && !state.runAnyway; }
+
+    function render() {
+      root.render(React.createElement(Lib.LivingCity, {
+        theme: state.theme,
+        speed: state.speed,
+        density: state.density,
+        paused: state.paused,
+        respectReducedMotion: !state.runAnyway,
+        label: 'An animated isometric city: traffic, a truck being loaded, charging cars, robotaxis, a crane and humanoid robots among people',
+      }));
+      var still = state.paused || stillForMotion();
+      document.getElementById('play').textContent = still ? 'Play' : 'Pause';
+      document.getElementById('motion-note').hidden = !stillForMotion() || state.paused;
+      showResolved();
+    }
+
+    function showResolved() {
+      var t = state.theme === 'auto' ? Lib.resolveTheme(mount) : state.theme;
+      var name = t === 'dark' ? 'night' : 'light';
+      document.getElementById('resolved').innerHTML = state.theme === 'auto' ? 'Following page: <b>' + name + '</b>' : 'Showing <b>' + name + '</b>';
+    }
+
+    document.querySelectorAll('[data-theme-choice]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.theme = b.getAttribute('data-theme-choice');
+        document.querySelectorAll('[data-theme-choice]').forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)); });
+        render();
+      });
+    });
+    var speed = document.getElementById('speed');
+    speed.addEventListener('input', function () {
+      state.speed = Number(speed.value);
+      document.getElementById('speed-value').textContent = (state.speed % 1 ? state.speed.toFixed(2).replace(/0$/, '') : state.speed) + '×';
+      render();
+    });
+    var density = document.getElementById('density');
+    // a new crowd means rebuilding the scene, so wait until the slider is let go
+    density.addEventListener('input', function () {
+      document.getElementById('density-value').textContent = Number(density.value).toFixed(1);
+    });
+    density.addEventListener('change', function () {
+      state.density = Number(density.value);
+      render();
+    });
+    document.getElementById('play').addEventListener('click', function () {
+      if (state.paused || stillForMotion()) { state.paused = false; state.runAnyway = true; }
+      else state.paused = true;
+      render();
+    });
+    document.getElementById('copy').addEventListener('click', function () {
+      var btn = this;
+      var text = document.getElementById('snippet').textContent;
+      var done = function () { btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = 'Copy'; }, 1600); };
+      var select = function () {
+        var r = document.createRange(); r.selectNodeContents(document.getElementById('snippet'));
+        var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = 'Selected';
+      };
+      try { navigator.clipboard.writeText(text).then(done, select); } catch (e) { select(); }
+    });
+    Lib.watchTheme(mount, showResolved);
+    render();
+  })();
+</script>

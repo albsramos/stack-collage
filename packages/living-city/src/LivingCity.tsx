@@ -1,9 +1,14 @@
 import { useEffect, useRef, type CSSProperties } from 'react';
-import { ASPECT, DEFAULTS, Scene, type Fit } from './engine/scene';
+import { ASPECT, DEFAULTS, Scene, type Fit, type SceneOptions } from './engine/scene';
+import { resolveTheme, watchTheme, type ThemeChoice } from './theme';
 
 export interface LivingCityProps {
-  /** Colour theme. `auto` follows the visitor's light/dark preference. Default `light`. */
-  theme?: 'light' | 'dark' | 'auto';
+  /**
+   * `auto` (default) matches the page: a `data-theme="dark"` (or `data-bs-theme`, `data-color-scheme`, …) on an
+   * ancestor, a `dark` class on <html> or <body>, or else the system setting, and follows it when it changes.
+   * `light` and `dark` force one look.
+   */
+  theme?: ThemeChoice;
   /** Simulation speed, 1 = real time. Default 1. */
   speed?: number;
   /** How busy the streets are, from 0.3 (calm) to 1.5 (rush hour). Default 1. */
@@ -28,7 +33,11 @@ export interface LivingCityProps {
   style?: CSSProperties;
 }
 
-const mq = (q: string) => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(q) : null);
+/** Ground colour of each theme, shown before the first frame so the box never flashes the wrong colour. */
+const GROUND = { light: '#ebebef', dark: '#1b1c21' };
+
+const reducedQuery = () =>
+  typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
 
 /**
  * A self-running isometric city: cars and robotaxis drive, a semi gets loaded and leaves, a crane swings, and
@@ -36,56 +45,52 @@ const mq = (q: string) => (typeof window !== 'undefined' && window.matchMedia ? 
  * keep the scene's own aspect ratio.
  */
 export function LivingCity(props: LivingCityProps) {
-  const {
-    theme = 'light',
-    speed = DEFAULTS.speed,
-    density = DEFAULTS.density,
-    seed = DEFAULTS.seed,
-    fit = DEFAULTS.fit,
-    focus,
-    zoom = 1,
-    paused = false,
-    maxDpr = DEFAULTS.maxDpr,
-    respectReducedMotion = true,
-    label,
-    className,
-    style,
-  } = props;
+  const { theme = 'auto', focus, label, className, style } = props;
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const scene = useRef<Scene | null>(null);
-  const env = useRef({ dark: false, reduced: false });
+  const latest = useRef(props);
+  latest.current = props;
+  const reduced = useRef(false);
 
-  const resolved = () => {
-    const t = theme === 'auto' ? (env.current.dark ? 'dark' : 'light') : theme;
+  /** Scene options from the latest props and the page around us. */
+  const options = (): Partial<SceneOptions> => {
+    const p = latest.current;
+    const choice = p.theme ?? 'auto';
     return {
-      theme: t as 'light' | 'dark',
-      speed,
-      density,
-      seed,
-      fit,
-      focusX: focus?.[0] ?? 0.5,
-      focusY: focus?.[1] ?? 0.5,
-      zoom,
-      maxDpr,
-      paused: paused || (respectReducedMotion && env.current.reduced),
+      theme: choice === 'auto' ? resolveTheme(wrap.current) : choice,
+      speed: p.speed ?? DEFAULTS.speed,
+      density: p.density ?? DEFAULTS.density,
+      seed: p.seed ?? DEFAULTS.seed,
+      fit: p.fit ?? DEFAULTS.fit,
+      focusX: p.focus?.[0] ?? 0.5,
+      focusY: p.focus?.[1] ?? 0.5,
+      zoom: p.zoom ?? 1,
+      maxDpr: p.maxDpr ?? DEFAULTS.maxDpr,
+      paused: !!p.paused || ((p.respectReducedMotion ?? true) && reduced.current),
     };
+  };
+
+  const apply = () => {
+    const o = options();
+    scene.current?.set(o);
+    if (wrap.current) wrap.current.style.backgroundColor = GROUND[o.theme ?? 'light'];
   };
 
   // create once
   useEffect(() => {
     const el = wrap.current, cv = canvas.current;
     if (!el || !cv) return;
-    const dark = mq('(prefers-color-scheme: dark)');
-    const reduced = mq('(prefers-reduced-motion: reduce)');
-    env.current = { dark: !!dark?.matches, reduced: !!reduced?.matches };
+    const rm = reducedQuery();
+    reduced.current = !!rm?.matches;
     let s: Scene;
     try {
-      s = new Scene(cv, resolved());
+      s = new Scene(cv, options());
     } catch {
       return;
     }
     scene.current = s;
+    apply();
     const rect = el.getBoundingClientRect();
     s.resize(rect.width, rect.height);
     const ro = new ResizeObserver((entries) => {
@@ -95,21 +100,17 @@ export function LivingCity(props: LivingCityProps) {
     ro.observe(el);
     const io = typeof IntersectionObserver !== 'undefined' ? new IntersectionObserver((e) => s.setVisible(e[0].isIntersecting)) : null;
     io?.observe(el);
-    const onDark = () => {
-      env.current.dark = !!dark?.matches;
-      s.set(resolved());
-    };
+    const unwatch = watchTheme(el, apply);
     const onReduced = () => {
-      env.current.reduced = !!reduced?.matches;
-      s.set(resolved());
+      reduced.current = !!rm?.matches;
+      apply();
     };
-    dark?.addEventListener?.('change', onDark);
-    reduced?.addEventListener?.('change', onReduced);
+    rm?.addEventListener?.('change', onReduced);
     return () => {
       ro.disconnect();
       io?.disconnect();
-      dark?.removeEventListener?.('change', onDark);
-      reduced?.removeEventListener?.('change', onReduced);
+      unwatch();
+      rm?.removeEventListener?.('change', onReduced);
       s.destroy();
       scene.current = null;
     };
@@ -117,10 +118,7 @@ export function LivingCity(props: LivingCityProps) {
   }, []);
 
   // follow prop changes
-  useEffect(() => {
-    scene.current?.set(resolved());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [theme, speed, density, seed, fit, focus?.[0], focus?.[1], zoom, paused, maxDpr, respectReducedMotion]);
+  useEffect(apply, [theme, props.speed, props.density, props.seed, props.fit, focus?.[0], focus?.[1], props.zoom, props.paused, props.maxDpr, props.respectReducedMotion]);
 
   return (
     <div
@@ -129,7 +127,14 @@ export function LivingCity(props: LivingCityProps) {
       role={label ? 'img' : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
-      style={{ position: 'relative', width: '100%', aspectRatio: `${ASPECT}`, overflow: 'hidden', ...style }}
+      style={{
+        position: 'relative',
+        width: '100%',
+        aspectRatio: `${ASPECT}`,
+        overflow: 'hidden',
+        backgroundColor: theme === 'dark' ? GROUND.dark : GROUND.light,
+        ...style,
+      }}
     >
       <canvas ref={canvas} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
     </div>
