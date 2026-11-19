@@ -121,8 +121,26 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
   const CW5 = traffic.zone(86, 42, 89, 50, sameKind);
   // where the loaded truck cuts across the corner of the plaza
   const TP = traffic.zone(37.5, 60.5, 44, 72, sameKind);
-  // where yard trucks cross the pavement to leave by the street
-  const YX = traffic.zone(57, 38.5, 63, 42, sameKind);
+  // Stretches a semi needs to itself: where yard trucks turn out onto the avenue, and where the bay truck crosses
+  // the factory road. The truck waits until nothing is in them (so it never strands a trailer across a lane),
+  // then cars wait for it; cars never queue behind a truck that is still waiting.
+  const semiOnly = (a: string, b: string) => a === b && a !== 'semi';
+  const truckZone = (x0: number, y0: number, x1: number, y1: number) => {
+    const z = traffic.zone(x0, y0, x1, y1, semiOnly);
+    z.keyOf = (v) => (v.kind === 'semi' ? 'semi' : 'car');
+    z.yieldKey = 'semi';
+    z.yieldToQueue = false;
+    return z;
+  };
+  truckZone(68, 4, 72.2, 31);
+  truckZone(44, 52, 52, 72);
+  // where cars leaving the charging lot join the factory road: they wait for a moment with nobody in it
+  const merge = traffic.zone(44, 52, 52, 63, (a, b) => a === b && a !== 'merge');
+  merge.keyOf = (v) => (v.role === 'lot' ? 'merge' : 'car');
+  merge.yieldKey = 'merge';
+  merge.yieldToQueue = false;
+  // the pavement the yard trucks cross on their way out
+  const YE = traffic.zone(65, 6, 68, 27, sameKind);
   // the two middle docks are worked by live trucks; the end docks hold parked trailers
   const yard = new TruckYard(env, [10.5, 16.5]);
   const parkedDocks = [4.5, 22.5];
@@ -257,8 +275,8 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
     }
   }
   S.push(
-    new BoxItem(62.2, 8.0, 0, 64.8, 10.4, 2.1, pal.factory, { edge }, (r) => {
-      onFaceY(r, 62.2, 64.8, 10.4, 2.1, (ctx, w) => {
+    new BoxItem(62.2, 0.4, 0, 64.8, 2.8, 2.1, pal.factory, { edge }, (r) => {
+      onFaceY(r, 62.2, 64.8, 2.8, 2.1, (ctx, w) => {
         ctx.strokeStyle = pal.night ? 'rgba(0,0,0,0.3)' : 'rgba(90,92,104,0.25)';
         ctx.lineWidth = 0.08;
         ctx.beginPath();
@@ -401,7 +419,7 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
   // ------------------------------------------------------------------------------------------------- greenery and street furniture
   const trees: [number, number, 'tree' | 'tree2' | 'poplar' | 'small', number][] = [
     [29.6, 66.4, 'tree', 1], [34.6, 69.0, 'tree2', 0.9], [47.4, 39.2, 'tree', 0.95], [27.6, 44.5, 'poplar', 0.9],
-    [65.7, 21.8, 'poplar', 1], [65.7, 33.0, 'poplar', 1], [65.8, -9, 'poplar', 1], [78.7, 16.5, 'tree', 1],
+    [65.7, 28.2, 'poplar', 1], [65.7, 33.0, 'poplar', 1], [65.8, -9, 'poplar', 1], [78.7, 16.5, 'tree', 1],
     [84.3, 56.6, 'tree', 1], [89.8, 63.4, 'tree2', 1], [99.5, 57.5, 'small', 1], [105.5, 52.6, 'tree', 1], [54.0, 82.6, 'small', 0.9],
     [53.2, 92.5, 'poplar', 0.9], [53.4, 103, 'tree2', 0.9], [31.0, 103.5, 'tree', 1], [31.2, 85.2, 'tree2', 0.95],
     [18.6, 74.4, 'small', 0.9], [98.8, 40.0, 'tree2', 0.9], [110, 39.6, 'tree', 1], [78.8, 88.5, 'tree', 1],
@@ -414,7 +432,7 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
   ];
   hedges.forEach((h, i) => S.push(new HedgeItem(sprites, h[0], h[1], h[2], h[3], pal.planter, i)));
   const lamps: number[][] = [
-    [65.4, 10, 1.2, 0], [65.4, 30, 1.2, 0], [65.4, 58, 1.2, 0], [65.4, 92, 1.2, 0], [78.6, 22, -1.2, 0], [78.6, 92, -1.2, 0],
+    [65.4, 2, 1.2, 0], [65.4, 31, 1.2, 0], [65.4, 58, 1.2, 0], [65.4, 92, 1.2, 0], [78.6, 22, -1.2, 0], [78.6, 92, -1.2, 0],
     [94, 39.4, 0, 1.2], [112, 39.4, 0, 1.2], [95.3, 52.6, 0, -1.2], [54.6, 88, -1.2, 0], [41.6, 58, 1.2, 0], [55.0, 39.4, 0, 1.2],
   ];
   for (const [x, y, ax, ay] of lamps) S.push(new LampItem(x, y, ax, ay, pal.steel, pal.factoryDark.right));
@@ -459,8 +477,11 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
 
   // ------------------------------------------------------------------------------------------------- walkways
   const g = graph;
-  const aw = [g.node(66.5, -22, true), g.node(66.5, 13), g.node(66.5, 34.5), g.node(66.5, 40.5), g.node(66.5, 51.5), g.node(66.5, 66), g.node(66.5, 81.5), g.node(66.5, 96), g.node(66.5, 112, true)];
-  g.chain(aw.slice(0, 4));
+  const aw = [g.node(66.5, -22, true), g.node(66.5, 4), g.node(66.5, 34.5), g.node(66.5, 40.5), g.node(66.5, 51.5), g.node(66.5, 66), g.node(66.5, 81.5), g.node(66.5, 96), g.node(66.5, 112, true)];
+  const awExit = g.node(66.5, 28.5);
+  g.link(aw[0], aw[1]);
+  g.link(aw[1], awExit, YE);
+  g.chain([awExit, aw[2], aw[3]]);
   g.chain(aw.slice(4));
   const ae = [g.node(77.5, -22, true), g.node(77.5, 34.5), g.node(77.5, 40.5), g.node(77.5, 51.5), g.node(80.6, 55.5), g.node(80.6, 68), g.node(77.8, 76), g.node(77.5, 81.5), g.node(77.5, 100, true)];
   g.chain(ae.slice(0, 3));
@@ -468,9 +489,8 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
   g.link(aw[2], ae[1], CW3);
   g.link(aw[6], ae[7], CW4);
   const sn = [g.node(42.5, 54), g.node(44.31, 47.25), g.node(49.25, 42.31), g.node(52.5, 41.1), g.node(56, 40.5), g.node(61, 40.5)];
-  g.chain(sn.slice(0, 5));
-  g.link(sn[4], sn[5], YX);
-  g.link(sn[5], aw[3], YX);
+  g.chain(sn);
+  g.link(sn[5], aw[3]);
   const sne = [g.node(86.5, 40.5), g.node(104, 40.5), g.node(130, 40.5, true)];
   g.link(ae[2], sne[0]);
   g.chain(sne);
@@ -512,11 +532,11 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
   for (let i = 0; i < crowd.targetRobots; i++) crowd.wanderer('robot');
 
   // ------------------------------------------------------------------------------------------------- traffic
-  const routes: { pts: number[][]; r: number[]; w: number; semi?: boolean }[] = [
-    { pts: [[70, -18], [70, 112]], r: [], w: 3, semi: true },
-    { pts: [[74, 112], [74, -18]], r: [], w: 3, semi: true },
-    { pts: [[50, 135], [50, 48], [135, 48]], r: [6], w: 1.3, semi: true },
-    { pts: [[135, 44], [46, 44], [46, 135]], r: [10], w: 1.3, semi: true },
+  const routes: { pts: number[][]; r: number[]; w: number }[] = [
+    { pts: [[70, -18], [70, 112]], r: [], w: 3 },
+    { pts: [[74, 112], [74, -18]], r: [], w: 3 },
+    { pts: [[50, 135], [50, 48], [135, 48]], r: [6], w: 1.3 },
+    { pts: [[135, 44], [46, 44], [46, 135]], r: [10], w: 1.3 },
     { pts: [[70, -18], [70, 48], [135, 48]], r: [6], w: 0.5 },
     { pts: [[70, -18], [70, 44], [46, 44], [46, 135]], r: [2, 10], w: 0.8 },
     { pts: [[74, 112], [74, 48], [135, 48]], r: [2], w: 1 },
@@ -528,7 +548,8 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
   ];
   const paths = routes.map((rt) => Path.poly(rt.pts, rt.r));
   const totalW = routes.reduce((a, r) => a + r.w, 0);
-  const kinds: [VehicleKind, number, number][] = [['car', 0.42, 7.4], ['suv', 0.26, 7], ['pod', 0.12, 6.4], ['pickup', 0.07, 7], ['semi', 0.08, 5.6], ['van', 0.05, 6]];
+  // semis only come for the yard and the loading bay, not as through traffic
+  const kinds: [VehicleKind, number, number][] = [['car', 0.46, 7.4], ['suv', 0.28, 7], ['pod', 0.13, 6.4], ['pickup', 0.08, 7], ['van', 0.05, 6]];
   let spawnT = 0;
   const targetCars = Math.round(11 * density);
   const spawnCar = () => {
@@ -537,13 +558,11 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
     const rt = routes[i];
     let v = rng(), k = 0;
     while (v > kinds[k][1] && k < kinds.length - 1) v -= kinds[k++][1];
-    let [kind, , vmax] = kinds[k];
-    if (kind === 'semi' && !rt.semi) [kind, , vmax] = kinds[0];
+    const [kind, , vmax] = kinds[k];
     const [sx0, sy0] = rt.pts[0];
-    if (!traffic.clear(sx0, sy0, kind === 'semi' ? 18 : 9)) return;
-    const paint = kind === 'pod' || kind === 'van' ? pal.gold : kind === 'semi' ? (rng() < 0.8 ? pal.white : pal.paints[2]) : pick(rng, pal.paints);
-    const veh = traffic.add(kind, paint, [{ path: paths[i], vmax: vmax * rr(rng, 0.9, 1.05) }]);
-    veh.mats[5] = pal.white;
+    if (!traffic.clear(sx0, sy0, 9)) return;
+    const paint = kind === 'pod' || kind === 'van' ? pal.gold : pick(rng, pal.paints);
+    traffic.add(kind, paint, [{ path: paths[i], vmax: vmax * rr(rng, 0.9, 1.05) }]);
   };
 
   // ------------------------------------------------------------------------------------------------- ground
@@ -572,7 +591,7 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
     ctx.beginPath();
     // the truck yard, its gate off the avenue and its way out to the street
     groundRect(ctx, 30, -40, 66.4, 38.8);
-    groundRect(ctx, 58.4, 38.6, 61.6, 42.2);
+    groundRect(ctx, 64, 6.4, 68.4, 26.6);
     groundRect(ctx, 64, -9.6, 68.4, -6.4);
     groundRect(ctx, 30, 72, 44, 140);
     groundRect(ctx, 54.5, 53, 66, 80.6);
@@ -658,7 +677,7 @@ export function buildWorld(pal: Palette, sprites: Sprites, opts: WorldOptions): 
     ctx.lineWidth = 0.12;
     ctx.beginPath();
     for (const sx of lot.stalls) {
-      for (const dx of [-1.6, 1.6]) {
+      for (const dx of [-1.5, 1.5]) {
         lineW(ctx, sx + dx, 61.9, 0, sx + dx, 66.6, 0);
         lineW(ctx, sx + dx, 67.4, 0, sx + dx, 72.2, 0);
       }

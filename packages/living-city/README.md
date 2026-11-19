@@ -6,10 +6,11 @@ it plays.
 ![The scene in the light theme](docs/preview-light.jpg)
 
 - **Traffic**: cars, SUVs, an angular pickup, two-seat robotaxis and a robovan drive a small road network. They stop
-  at an invisible signal at the junction and give way to people already on the zebra crossings.
-- **Truck yard**: semis turn in off the avenue and wait at the gate until the yard is clear. Each one drives down the
-  yard lane past its dock, then backs in with the trailer swinging round. It loads under a green dock lamp, then pulls
-  out and leaves by the street.
+  at an invisible signal at the junction, give way to people already on the zebra crossings, and hold back while a
+  truck pulls out. Semis only come for the yard and the loading bay, so there are never more than two at once.
+- **Truck yard**: one semi at a time turns in off the avenue. It drives down the yard lane past its dock, then backs
+  in with the trailer swinging round. It loads under a green dock lamp, then pulls straight out and turns onto the
+  avenue once there's a gap.
 - **Loading bay**: a semi pulls into the bay beside the factory and rolls up its curtain side. A forklift and two
   humanoid robots fill it pallet by pallet, then it closes up and drives off across the scene.
 - **Robots**: humanoid robots carry boxes between the docked trailers, help load the semi at the bay, patrol the
@@ -138,7 +139,8 @@ The demo has two extra views: `?gallery` shows every vehicle at eight headings, 
   follows its tractor with a hitch model going forward. When reversing, it replays a recorded forward pull-out
   backwards, which keeps the swing physically right. Each vehicle brakes for anything on the stretch of road it
   is about to drive. Junctions and crosswalks are zones it reserves in advance: first come, first served, with an
-  actuated signal at the junction.
+  actuated signal at the junction. Only the front vehicle of a queue reserves, and a semi reserves everything within
+  a truck length at once, so it never waits with its trailer across a lane.
 - `engine/walkers.ts`: people and robots, with a walk cycle and a walkway graph to wander.
 - `engine/activities.ts`: the scripted scenes (truck yard, loading bay, charging lot, robotaxi stop, crane,
   workbench, park).

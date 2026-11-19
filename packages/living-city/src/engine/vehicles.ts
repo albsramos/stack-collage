@@ -23,11 +23,15 @@ export class Zone {
    * Crosswalks use 'ped', so people gather at the kerb and cross between cars.
    */
   yieldKey: string | null = null;
+  /** With `false`, the yielding key only waits for others to clear out, not for those still queueing. */
+  yieldToQueue = true;
   /**
    * Optional invisible signal: approach letters allowed in each phase (e.g. ["NS", "EW"]). Phases switch when the
    * other side is waiting and the current one has had its minimum green, with a short clearance in between.
    */
   phases: string[] | null = null;
+  /** Optional per-vehicle key (e.g. to keep semis apart from everything else); defaults to 'car'. */
+  keyOf: ((v: Vehicle) => string) | null = null;
   phase = 0;
   private phaseT = 0;
   private clearing = 0;
@@ -83,7 +87,7 @@ export class Zone {
     }
     if (this.yieldKey !== null) {
       if (key === this.yieldKey) {
-        for (const q of this.queue) if (!this.compat(q.key, key)) return false;
+        if (this.yieldToQueue) for (const q of this.queue) if (!this.compat(q.key, key)) return false;
         return true;
       }
       for (const q of this.queue) {
@@ -381,7 +385,7 @@ export class Vehicle {
   readonly items: Item[] = [];
   private readonly pose: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
 
-  constructor(readonly kind: VehicleKind, readonly pal: Palette, paint: Mat, legs: Leg[], readonly traffic: Traffic) {
+  constructor(readonly kind: VehicleKind, readonly pal: Palette, paint: Mat, legs: Leg[], readonly traffic: Traffic, readonly role = '') {
     const [hl, hw, h] = DIMS[kind];
     this.hl = hl;
     this.hw = hw;
@@ -424,7 +428,7 @@ export class Vehicle {
       for (const [a, b] of l.path.spans(z.x0, z.y0, z.x1, z.y1)) {
         const p0 = l.path.at(Math.min(l.path.len, a + 0.5), { x: 0, y: 0, hx: 1, hy: 0 });
         const p1 = l.path.at(Math.max(0, b - 0.5), { x: 0, y: 0, hx: 1, hy: 0 });
-        let key = 'car';
+        let key = z.keyOf ? z.keyOf(this) : 'car';
         if (z.compat === junction) {
           const cr = p0.hx * p1.hy - p0.hy * p1.hx;
           const dot = p0.hx * p1.hx + p0.hy * p1.hy;
@@ -436,9 +440,11 @@ export class Vehicle {
     }
     reqs.sort((a, b) => a.sIn - b.sIn);
     const groups: Group[] = [];
+    // a semi never waits with its trailer across a lane: it reserves everything within a truck length together
+    const gapLimit = this.kind === 'semi' ? Math.max(3.5, this.tail + this.hl) : 3.5;
     for (const q of reqs) {
       const g = groups[groups.length - 1];
-      if (g && q.sIn - Math.max(...g.map((x) => x.sOut)) < 3.5) g.push(q);
+      if (g && q.sIn - Math.max(...g.map((x) => x.sOut)) < gapLimit) g.push(q);
       else groups.push([q]);
     }
     const limits: { s0: number; s1: number; v: number }[] = [];
@@ -524,6 +530,8 @@ export class Vehicle {
       if (!pending) continue;
       const sIn = g[0].sIn;
       if (sIn - front >= reach) break;
+      // only the front vehicle of a queue reserves what lies ahead; one stuck behind another waits its turn
+      if (this.lastGap < sIn - front - 0.5) break;
       let ok = true;
       for (const q of g) if (!q.held && !q.done && !q.zone.ask(this, q.key)) ok = false;
       if (!ok) {
@@ -568,10 +576,11 @@ export class Vehicle {
     if (vt > this.v) this.v = Math.min(vt, this.v + ACC * dt);
     else this.v = Math.max(vt, this.v - DEC * 2.2 * dt);
     if (dStop <= 0.02 && dStop < len - this.s - 0.05) this.v = 0;
-    // deadlock breaker
+    // deadlock breaker: when the vehicles in front block each other in a loop that comes back to us, or as a last
+    // resort after a very long stall. A plain queue (say, behind a truck at a red light) just waits.
     if (blocked && this.v < 0.05) {
       this.stuckT += dt;
-      if (this.stuckT > 12) {
+      if ((this.stuckT > 6 && this.inCycle()) || (this.stuckT > 90 && !this.behindHold())) {
         this.ghostT = 2.5;
         this.stuckT = 0;
       }
@@ -630,7 +639,28 @@ export class Vehicle {
     this.ty = ky - dy * 9.6;
   }
 
-  /** @internal debugging: the body that last blocked us */
+  /** The queue in front of us ends at a vehicle that is waiting on purpose (loading, charging, at a stop). */
+  private behindHold(): boolean {
+    let b = this.blocker;
+    for (let i = 0; i < 12 && b; i++) {
+      const l = b.leg;
+      if (b.keep || (l && (l.until || l.dwell !== undefined))) return true;
+      b = b.blocker;
+    }
+    return false;
+  }
+
+  private inCycle(): boolean {
+    let b = this.blocker;
+    for (let i = 0; i < 8 && b; i++) {
+      if (b === this) return true;
+      if (b.v > 0.05) return false;
+      b = b.blocker;
+    }
+    return false;
+  }
+
+  /** @internal the vehicle whose body is first on the road ahead of us */
   blocker: Vehicle | null = null;
 
   private readonly probe: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
@@ -639,7 +669,15 @@ export class Vehicle {
    * Distance from our front to the first vehicle that sits on the road we are about to drive, found by walking
    * our own path ahead (into following legs that we flow into) and testing each point against the other bodies.
    */
+  /** distance to the first vehicle on our road ahead, as of the last frame */
+  private lastGap = Infinity;
+
   private sense(): number {
+    this.lastGap = this.senseAhead();
+    return this.lastGap;
+  }
+
+  private senseAhead(): number {
     this.blocker = null;
     const look = 16;
     const step = 0.7;
@@ -986,8 +1024,9 @@ export class Traffic {
     return z;
   }
 
-  add(kind: VehicleKind, paint: Mat, legs: Leg[]) {
-    const v = new Vehicle(kind, this.pal, paint, legs, this);
+  /** `role` tags vehicles that zones treat specially (see `Zone.keyOf`). */
+  add(kind: VehicleKind, paint: Mat, legs: Leg[], role = '') {
+    const v = new Vehicle(kind, this.pal, paint, legs, this, role);
     this.vehicles.push(v);
     return v;
   }

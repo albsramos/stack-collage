@@ -171,10 +171,11 @@ export class TruckBay implements Activity {
         }
         break;
       case 'leaving':
-        if (!t || t.dead || t.li > 0) {
+        // the next truck is only sent once this one has left the scene
+        if (!t || t.dead) {
           this.truck = null;
           this.state = 'empty';
-          this.timer = rr(this.env.rng, 5, 9);
+          this.timer = rr(this.env.rng, 4, 8);
         }
         break;
     }
@@ -200,7 +201,7 @@ export class TruckBay implements Activity {
 
 // ---------------------------------------------------------------------------------------------------------------
 // Truck yard at the factory docks. A semi turns in off the avenue, waits at the gate until the yard is clear,
-// drives down the yard lane past its dock, backs in, loads, then pulls out and leaves by the street.
+// drives down the yard lane past its dock, backs in, loads, then pulls straight out and turns onto the avenue.
 
 export interface Dock {
   y: number;
@@ -236,18 +237,20 @@ export class TruckYard implements Activity {
   }
 
   private afterDocked(d: Dock, dwell: number): Leg[] {
-    const { stop, out } = this.geometry(d);
+    const y = d.y;
     return [
       { path: P([[44.5, d.y], [44.6, d.y]]), vmax: 1, ghost: true, dwell, until: (v) => {
         if (!this.mutex.take(v)) return false;
         d.loading = false;
         return true;
       } },
-      { path: out, vmax: 2.2, ghost: true, done: (v) => {
+      // pull straight out across the yard and turn right onto the avenue's near lane, never crossing traffic
+      { path: P([[44.6, y], [64, y]]), vmax: 2.4, ghost: true },
+      { path: P([[64, y], [70, y], [70, y + 14]], [6]), vmax: 4, done: (v) => {
         this.mutex.free(v);
         d.taken = false;
       } },
-      { path: P([[TruckYard.LANE, stop], [TruckYard.LANE, 48], [135, 48]], [6]), vmax: 5, done: () => this.trucks-- },
+      { path: P([[70, y + 14], [70, 112]]), vmax: 5.5, done: () => this.trucks-- },
     ];
   }
 
@@ -291,11 +294,16 @@ export class TruckYard implements Activity {
   }
 
   update(dt: number) {
+    // one truck in the yard at a time, with a pause after it leaves
+    if (this.trucks > 0) {
+      this.timer = Math.max(this.timer, rr(this.env.rng, 10, 20));
+      return;
+    }
     this.timer -= dt;
     if (this.timer > 0) return;
-    this.timer = rr(this.env.rng, 8, 16);
     const free = this.docks.filter((d) => !d.taken);
-    if (free.length && this.trucks < 2 && this.env.traffic.clear(70, -18, 18)) this.spawn(pick(this.env.rng, free));
+    if (free.length && this.env.traffic.clear(70, -18, 18)) this.spawn(pick(this.env.rng, free));
+    else this.timer = 2;
   }
 }
 
@@ -303,10 +311,12 @@ export class TruckYard implements Activity {
 // Charging lot: three live stalls (cars pull in nose first, charge, back out and leave) and three parked cars.
 
 export class ChargingLot implements Activity {
-  readonly stalls = [56.6, 59.8, 63.0];
+  readonly stalls = [56.2, 59.2, 62.2];
   private busy = [false, false, false];
   private cars: (Vehicle | null)[] = [null, null, null];
   private lot = new Mutex();
+  /** the car driving in and queueing for the lot, if any */
+  private incoming: Vehicle | null = null;
   private timer = 1;
   private parked: { x: number; paint: Mat }[] = [];
 
@@ -324,7 +334,7 @@ export class ChargingLot implements Activity {
     }
     // charger posts between the two rows
     this.stalls.forEach((x, i) => {
-      const px = x + 1.55, py = 67;
+      const px = x + 1.5, py = 67;
       statics.push(
         new FnItem(px - 0.2, py - 0.15, 0, px + 0.2, py + 0.15, 1.9, (r) => {
           box(r, px - 0.18, py - 0.13, 0, px + 0.18, py + 0.13, 1.75, pal.white, { edge: 'rgba(255,255,255,0.6)' });
@@ -358,36 +368,48 @@ export class ChargingLot implements Activity {
     });
   }
 
+  /** Back straight out of stall i, swing round to face the exit, cross the lot and join the factory road. */
+  private leave(i: number, sx: number): Leg[] {
+    return [
+      { path: P([[sx, 64.2], [sx, 60.3], [sx + 1.8, 60.3]], [1.8]), rev: true, vmax: 1.5, ghost: true },
+      { path: P([[sx + 1.8, 60.3], [54.6, 60.3]]), vmax: 2.6 },
+      // the lot stays ours until we are out on the road, so the next car can't drive into us while we wait to merge
+      { path: P([[54.6, 60.3], [50.5, 60.3]]), vmax: 3, done: (vv) => {
+        this.lot.free(vv);
+        this.busy[i] = false;
+        this.cars[i] = null;
+      } },
+      { path: P([[50.5, 60.3], [46, 60.3], [46, 135]], [3]), vmax: 7 },
+    ];
+  }
+
+  private charge(dwell: number) {
+    return {
+      arrive: (vv: Vehicle) => {
+        this.lot.free(vv);
+        vv.charging = true;
+      },
+      dwell,
+      until: (vv: Vehicle) => {
+        vv.charging = false;
+        return this.lot.take(vv);
+      },
+    };
+  }
+
   private spawn(i: number) {
     const { traffic, pal, rng } = this.env;
     const sx = this.stalls[i];
     this.busy[i] = true;
     const kind = rng() < 0.6 ? 'car' : 'suv';
     const v = traffic.add(kind, pick(rng, pal.paints), [
-      { path: P([[50, 135], [50, 48], [60.4, 48], [60.4, 51.2]], [6, 2.5]), vmax: 7, until: (vv) => this.lot.take(vv) },
-      {
-        path: P([[60.4, 51.2], [60.4, 56.5], [sx, 60.5], [sx, 64.0]], [2.4, 2.4]),
-        vmax: 2.4,
-        ghost: true,
-        arrive: (vv) => {
-          this.lot.free(vv);
-          vv.charging = true;
-        },
-        dwell: rr(rng, 14, 30),
-        until: (vv) => {
-          vv.charging = false;
-          return this.lot.take(vv);
-        },
-      },
-      { path: P([[sx, 64.0], [sx, 61.2], [sx + 2.4, 61.2]], [2.2]), rev: true, vmax: 1.5, ghost: true },
-      { path: P([[sx + 2.4, 61.2], [54.6, 61.2]]), vmax: 2.6, ghost: true, done: (vv) => {
-        this.lot.free(vv);
-        this.busy[i] = false;
-        this.cars[i] = null;
-      } },
-      { path: P([[54.6, 61.2], [46, 61.2], [46, 135]], [3]), vmax: 7 },
-    ]);
+      // wait for the lot inside its entrance, well clear of the street and of trucks swinging round the bend
+      { path: P([[50, 135], [50, 48], [60.4, 48], [60.4, 55.6]], [6, 2.5]), vmax: 7, until: (vv) => this.lot.take(vv), done: () => (this.incoming = null) },
+      { path: P([[60.4, 55.6], [60.4, 57.5], [sx, 61.5], [sx, 64.2]], [2, 2]), vmax: 2.4, ghost: true, ...this.charge(rr(rng, 14, 30)) },
+      ...this.leave(i, sx),
+    ], 'lot');
     this.cars[i] = v;
+    this.incoming = v;
   }
 
   /** Put a car straight into a stall (for the opening frame). */
@@ -396,18 +418,9 @@ export class ChargingLot implements Activity {
     const sx = this.stalls[i];
     this.busy[i] = true;
     const v = traffic.add(rng() < 0.6 ? 'car' : 'suv', pick(rng, pal.paints), [
-      { path: P([[sx, 63.9], [sx, 64.0]]), vmax: 1, ghost: true, arrive: (vv) => (vv.charging = true), dwell: rr(rng, 4, 20), until: (vv) => {
-        vv.charging = false;
-        return this.lot.take(vv);
-      } },
-      { path: P([[sx, 64.0], [sx, 61.2], [sx + 2.4, 61.2]], [2.2]), rev: true, vmax: 1.5, ghost: true },
-      { path: P([[sx + 2.4, 61.2], [54.6, 61.2]]), vmax: 2.6, ghost: true, done: (vv) => {
-        this.lot.free(vv);
-        this.busy[i] = false;
-        this.cars[i] = null;
-      } },
-      { path: P([[54.6, 61.2], [46, 61.2], [46, 135]], [3]), vmax: 7 },
-    ]);
+      { path: P([[sx, 64.1], [sx, 64.2]]), vmax: 1, ghost: true, ...this.charge(rr(rng, 4, 20)), arrive: (vv: Vehicle) => (vv.charging = true) },
+      ...this.leave(i, sx),
+    ], 'lot');
     this.cars[i] = v;
   }
 
@@ -415,8 +428,10 @@ export class ChargingLot implements Activity {
     this.timer -= dt;
     if (this.timer > 0) return;
     this.timer = rr(this.env.rng, 5, 11);
+    // one car on its way in at a time, so nobody queues out into the street
+    if (this.incoming && this.incoming.dead) this.incoming = null;
     const free = this.busy.map((b, i) => (b ? -1 : i)).filter((i) => i >= 0);
-    if (free.length && this.env.traffic.clear(50, 135, 8)) this.spawn(pick(this.env.rng, free));
+    if (!this.incoming && free.length && this.env.traffic.clear(50, 135, 8)) this.spawn(pick(this.env.rng, free));
   }
 }
 
@@ -447,6 +462,15 @@ export class TaxiStop implements Activity {
     else w.go([{ x: 80.6, y: 68 }, { x, y, face: [-1, 0.2] }]);
     crowd.add(w);
     this.waiting.push(w);
+  }
+
+  private clearToLeave(me: Vehicle) {
+    for (const o of this.env.traffic.vehicles) {
+      if (o === me || o.dead) continue;
+      // queued in the lane beside us, or coming up from behind
+      for (const b of o.bodies) if (b.x > 71.5 && b.x < 76.5 && b.y > 50 && b.y < me.y + 28) return false;
+    }
+    return true;
   }
 
   update(dt: number) {
@@ -511,7 +535,8 @@ export class TaxiStop implements Activity {
         break;
       }
       case 'close':
-        if (v.door <= 0) this.phase = 'none';
+        // pull out only when nobody is queued in the lane alongside
+        if (v.door <= 0 && this.clearToLeave(v)) this.phase = 'none';
         break;
     }
   }
